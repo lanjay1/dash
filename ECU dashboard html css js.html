@@ -1,0 +1,1993 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uma Racing ECU Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #0f0f1e 100%);
+            color: white;
+            min-height: 100vh;
+            overflow-x: hidden;
+            user-select: none;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 15px 20px;
+            background: rgba(0, 0, 0, 0.6);
+            border-bottom: 2px solid rgba(138, 43, 226, 0.3);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo-icon {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, #ffd700, #ffed4e);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            color: #000;
+            font-size: 24px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .logo-icon:active {
+            transform: scale(0.95);
+        }
+
+        .logo-brand {
+            background: white;
+            padding: 8px 15px;
+            border-radius: 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .brand-uma {
+            color: #000;
+            font-weight: bold;
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        .brand-racing {
+            background: linear-gradient(135deg, #e63946, #dc2f02);
+            color: white;
+            padding: 2px 10px;
+            font-weight: bold;
+            font-size: 14px;
+            border-radius: 3px;
+        }
+
+        .status-icons {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            font-size: 20px;
+        }
+
+        .battery {
+            border: 2px solid white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        /* Main Container */
+        .main-container {
+            position: relative;
+        }
+
+        /* Dashboard View */
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            padding: 20px;
+            padding-bottom: 100px;
+        }
+
+        .dashboard.hidden {
+            display: none;
+        }
+
+        .gauge-card {
+            background: linear-gradient(135deg, rgba(30, 30, 45, 0.95), rgba(20, 20, 35, 0.95));
+            border: 2px solid rgba(138, 43, 226, 0.4);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .gauge-card:active {
+            transform: scale(0.98);
+        }
+
+        .gauge-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(255, 255, 255, 0.02) 10px,
+                rgba(255, 255, 255, 0.02) 20px
+            );
+            pointer-events: none;
+        }
+
+        .gauge-label {
+            font-size: 14px;
+            color: #ffd700;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .gauge-value {
+            font-size: 48px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+            position: relative;
+            z-index: 1;
+        }
+
+        .gauge-unit {
+            font-size: 16px;
+            color: rgba(255, 255, 255, 0.6);
+            margin-top: 5px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .gauge-card.highlight {
+            grid-column: span 1;
+        }
+
+        /* Menu Sidebar */
+        .menu-overlay {
+            position: fixed;
+            top: 0;
+            left: -100%;
+            width: 70%;
+            max-width: 350px;
+            height: 100vh;
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.98), rgba(75, 0, 130, 0.98));
+            z-index: 1000;
+            overflow-y: auto;
+            transition: left 0.3s ease-in-out;
+            box-shadow: 2px 0 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .menu-overlay.active {
+            left: 0;
+        }
+
+        .menu-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 999;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s, visibility 0.3s;
+        }
+
+        .menu-backdrop.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .menu-header {
+            padding: 20px;
+            border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .menu-close {
+            font-size: 28px;
+            cursor: pointer;
+            padding: 5px 10px;
+            transition: transform 0.2s;
+        }
+
+        .menu-close:active {
+            transform: scale(0.9);
+        }
+
+        .menu-item {
+            padding: 20px 30px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            cursor: pointer;
+            transition: background 0.2s, padding-left 0.2s;
+        }
+
+        .menu-item:hover {
+            background: rgba(255, 255, 255, 0.1);
+            padding-left: 35px;
+        }
+
+        .menu-item:active {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .menu-icon {
+            font-size: 24px;
+            width: 30px;
+            text-align: center;
+        }
+
+        /* Settings Panel */
+        .settings-panel {
+            padding: 20px;
+            padding-bottom: 100px;
+            display: none;
+        }
+
+        .settings-panel.active {
+            display: block;
+        }
+
+        .page-title {
+            text-align: center;
+            font-size: 28px;
+            padding: 20px;
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.8), rgba(75, 0, 130, 0.8));
+            margin: -20px -20px 20px -20px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            border-bottom: 3px solid rgba(138, 43, 226, 1);
+        }
+
+        .setting-row {
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.6), rgba(75, 0, 130, 0.6));
+            border: 2px solid rgba(138, 43, 226, 0.8);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 15px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .setting-row::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(255, 255, 255, 0.02) 10px,
+                rgba(255, 255, 255, 0.02) 20px
+            );
+            pointer-events: none;
+        }
+
+        .setting-label {
+            font-size: 14px;
+            margin-bottom: 10px;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+
+        .setting-value {
+            font-size: 42px;
+            font-weight: bold;
+            color: #ff0000;
+            text-shadow: 0 0 20px rgba(255, 0, 0, 0.6);
+            letter-spacing: 2px;
+            position: relative;
+            z-index: 1;
+            margin: 10px 0;
+        }
+
+        .setting-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .control-btn {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 50%;
+            color: white;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+
+        /* TPS Reset Circle */
+        .tps-reset-circle {
+            width: 300px;
+            height: 300px;
+            border: 8px solid rgba(138, 43, 226, 0.6);
+            border-radius: 50%;
+            margin: 40px auto;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: rgba(20, 20, 35, 0.5);
+        }
+
+        .tps-percentage {
+            font-size: 72px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 30px rgba(255, 255, 255, 0.5);
+        }
+
+        .tps-range {
+            font-size: 14px;
+            opacity: 0.7;
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .tps-range div {
+            margin: 5px 0;
+        }
+
+        .tps-indicator {
+            width: 20px;
+            height: 20px;
+            background: #8b2be2;
+            border-radius: 50%;
+            position: absolute;
+            bottom: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            box-shadow: 0 0 20px rgba(138, 43, 226, 0.8);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: translateX(-50%) scale(1); }
+            50% { transform: translateX(-50%) scale(1.2); }
+        }
+
+        .reset-btn {
+            background: linear-gradient(135deg, rgba(100, 100, 120, 0.8), rgba(80, 80, 100, 0.8));
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 20px 60px;
+            border-radius: 15px;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            margin: 20px auto;
+            display: block;
+            transition: all 0.2s;
+        }
+
+        .reset-btn:hover {
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.8), rgba(75, 0, 130, 0.8));
+            transform: scale(1.05);
+            box-shadow: 0 5px 20px rgba(138, 43, 226, 0.5);
+        }
+
+        .reset-btn:active {
+            transform: scale(0.98);
+        }
+
+        /* Bottom Navigation */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            justify-content: space-around;
+            padding: 15px;
+            border-top: 2px solid rgba(138, 43, 226, 0.5);
+            z-index: 50;
+        }
+
+        .nav-btn {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.8), rgba(75, 0, 130, 0.8));
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 15px;
+            color: white;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 20px rgba(138, 43, 226, 0.8);
+        }
+
+        .nav-btn:active {
+            transform: translateY(0);
+        }
+
+        /* Notification Toast */
+        .toast {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: linear-gradient(135deg, rgba(138, 43, 226, 0.95), rgba(75, 0, 130, 0.95));
+            padding: 15px 30px;
+            border-radius: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            z-index: 2000;
+            opacity: 0;
+            transition: all 0.3s;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        .toast.show {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        @media (max-width: 768px) {
+            .dashboard {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .menu-overlay {
+                width: 80%;
+            }
+
+            .gauge-value {
+                font-size: 36px;
+            }
+
+            .tps-reset-circle {
+                width: 250px;
+                height: 250px;
+            }
+
+            .tps-percentage {
+                font-size: 56px;
+            }
+        }
+        .map-info-card {
+    background: linear-gradient(135deg, rgba(30, 30, 45, 0.95), rgba(20, 20, 35, 0.95));
+    border: 2px solid rgba(138, 43, 226, 0.4);
+    border-radius: 15px;
+    padding: 20px;
+    margin-bottom: 20px;
+}
+
+.map-info-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.map-info-content {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.map-detail {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(138, 43, 226, 0.2);
+}
+
+.map-detail:last-child {
+    border-bottom: none;
+}
+
+.map-detail-label {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+}
+
+.map-detail-value {
+    color: #ffd700;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+/* Map Action Section */
+.map-action-section {
+    margin: 20px 0;
+}
+
+.map-action-btn {
+    width: 100%;
+    background: linear-gradient(135deg, rgba(138, 43, 226, 0.8), rgba(75, 0, 130, 0.8));
+    border: 2px solid rgba(138, 43, 226, 1);
+    padding: 18px;
+    border-radius: 15px;
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.map-action-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 20px rgba(138, 43, 226, 0.6);
+}
+
+.map-action-btn:active {
+    transform: translateY(0);
+}
+
+/* Stored Maps Section */
+.stored-maps-section {
+    margin: 20px 0;
+}
+
+.section-title {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 15px;
+    padding: 10px;
+    background: rgba(138, 43, 226, 0.2);
+    border-radius: 8px;
+    text-align: center;
+}
+
+.stored-maps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.map-item {
+    background: linear-gradient(135deg, rgba(138, 43, 226, 0.3), rgba(75, 0, 130, 0.3));
+    border: 2px solid rgba(138, 43, 226, 0.5);
+    border-radius: 12px;
+    padding: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.map-item:hover {
+    background: linear-gradient(135deg, rgba(138, 43, 226, 0.5), rgba(75, 0, 130, 0.5));
+    transform: translateX(5px);
+}
+
+.map-item:active {
+    transform: scale(0.98);
+}
+
+.map-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.map-item-name {
+    font-size: 16px;
+    font-weight: bold;
+    color: white;
+}
+
+.map-item-date {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.map-item-details {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.6;
+}
+
+.map-item-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.map-item-btn {
+    flex: 1;
+    padding: 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(0, 0, 0, 0.3);
+    color: white;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.map-item-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.map-item-btn.load {
+    background: rgba(0, 255, 0, 0.2);
+    border-color: rgba(0, 255, 0, 0.5);
+}
+
+.map-item-btn.delete {
+    background: rgba(255, 0, 0, 0.2);
+    border-color: rgba(255, 0, 0, 0.5);
+}
+
+/* Bottom Actions */
+.map-bottom-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.map-btn-secondary {
+    flex: 1;
+    padding: 15px;
+    border-radius: 12px;
+    border: 2px solid rgba(138, 43, 226, 0.5);
+    background: rgba(30, 30, 45, 0.8);
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.map-btn-secondary:hover {
+    background: rgba(138, 43, 226, 0.3);
+    transform: translateY(-2px);
+}
+
+.map-btn-secondary:active {
+    transform: translateY(0);
+}
+
+/* Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal-content {
+    background: linear-gradient(135deg, rgba(30, 30, 45, 0.98), rgba(20, 20, 35, 0.98));
+    border: 2px solid rgba(138, 43, 226, 0.6);
+    border-radius: 20px;
+    width: 100%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 2px solid rgba(138, 43, 226, 0.3);
+}
+
+.modal-header h3 {
+    font-size: 18px;
+    color: white;
+}
+
+.modal-close {
+    font-size: 24px;
+    cursor: pointer;
+    padding: 5px 10px;
+    transition: transform 0.2s;
+}
+
+.modal-close:active {
+    transform: scale(0.9);
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.form-group {
+    margin-bottom: 20px;
+}
+
+.form-group label {
+    display: block;
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 8px;
+}
+
+.map-input,
+.map-textarea {
+    width: 100%;
+    padding: 12px;
+    border-radius: 10px;
+    border: 2px solid rgba(138, 43, 226, 0.4);
+    background: rgba(0, 0, 0, 0.3);
+    color: white;
+    font-size: 14px;
+    font-family: 'Arial', sans-serif;
+}
+
+.map-input:focus,
+.map-textarea:focus {
+    outline: none;
+    border-color: rgba(138, 43, 226, 0.8);
+}
+
+.map-input:read-only {
+    background: rgba(0, 0, 0, 0.5);
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.modal-footer {
+    display: flex;
+    gap: 10px;
+    padding: 20px;
+    border-top: 2px solid rgba(138, 43, 226, 0.3);
+}
+
+.btn-cancel,
+.btn-save {
+    flex: 1;
+    padding: 15px;
+    border-radius: 12px;
+    border: none;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-cancel {
+    background: rgba(100, 100, 120, 0.6);
+    color: white;
+}
+
+.btn-cancel:hover {
+    background: rgba(100, 100, 120, 0.8);
+}
+
+.btn-save {
+    background: linear-gradient(135deg, rgba(138, 43, 226, 0.8), rgba(75, 0, 130, 0.8));
+    color: white;
+}
+
+.btn-save:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(138, 43, 226, 0.5);
+}
+
+.btn-cancel:active,
+.btn-save:active {
+    transform: scale(0.98);
+}
+
+/* Empty State */
+.empty-maps {
+    text-align: center;
+    padding: 40px 20px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.empty-maps-icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+}
+
+.empty-maps-text {
+    font-size: 14px;
+}
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="header">
+        <div class="logo">
+            <div class="logo-icon" id="menuToggle">≡</div>
+            <div class="logo-brand">
+                <div class="brand-uma">uma</div>
+                <div class="brand-racing">racing</div>
+            </div>
+        </div>
+        <div class="status-icons">
+            <span>📡</span>
+            <span>🔗</span>
+            <span>📶</span>
+            <span class="battery">45</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <!-- Dashboard View -->
+        <div id="dashboardView" class="dashboard">
+            <div class="gauge-card">
+                <div class="gauge-label">AFR</div>
+                <div class="gauge-value">0</div>
+            </div>
+            <div class="gauge-card">
+                <div class="gauge-label">Temp</div>
+                <div class="gauge-value">0</div>
+                <div class="gauge-unit">°C</div>
+            </div>
+            <div class="gauge-card">
+                <div class="gauge-label">SA</div>
+                <div class="gauge-value">0</div>
+            </div>
+            <div class="gauge-card">
+                <div class="gauge-label">RPM</div>
+                <div class="gauge-value" id="rpmValue">0</div>
+                <div class="gauge-unit">rpm</div>
+            </div>
+            <div class="gauge-card">
+                <div class="gauge-label">Voltage</div>
+                <div class="gauge-value">0</div>
+                <div class="gauge-unit">V</div>
+            </div>
+            <div class="gauge-card">
+                <div class="gauge-label">Engine Temp</div>
+                <div class="gauge-value">0</div>
+                <div class="gauge-unit">°C</div>
+            </div>
+            <div class="gauge-card">
+                <div class="gauge-label">TPS</div>
+                <div class="gauge-value">0</div>
+                <div class="gauge-unit">%</div>
+            </div>
+            <div class="gauge-card">
+                <div class="gauge-label">Timing</div>
+                <div class="gauge-value">0</div>
+                <div class="gauge-unit">ms</div>
+            </div>
+            <div class="gauge-card">
+                <div class="gauge-label">MAP</div>
+                <div class="gauge-value">0</div>
+                <div class="gauge-unit">kPa</div>
+            </div>
+            <div class="gauge-card">
+                <div class="gauge-label">Speed</div>
+                <div class="gauge-value">0</div>
+                <div class="gauge-unit">km/h</div>
+            </div>
+            <div class="gauge-card">
+                <div class="gauge-label">AFR</div>
+                <div class="gauge-value">0</div>
+            </div>
+            <div class="gauge-card">
+                <div class="gauge-label">Counter</div>
+                <div class="gauge-value">0</div>
+            </div>
+            <div class="gauge-card highlight">
+                <div class="gauge-label">PHONE GPS SPEED</div>
+                <div class="gauge-value">0</div>
+                <div class="gauge-unit">km/h</div>
+            </div>
+        </div>
+
+        <!-- Backfire Settings Panel -->
+        <div id="backfirePanel" class="settings-panel">
+            <div class="page-title">Back Fire</div>
+            
+            <div class="setting-row">
+                <div class="setting-label">Idle Lope</div>
+                <div class="setting-value" data-value="OFF">OFF</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustToggle(this)">◄</div>
+                    <div class="control-btn" onclick="adjustToggle(this)">►</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">Close Throttle BackFire</div>
+                <div class="setting-value" data-value="OFF">OFF</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustToggle(this)">◄</div>
+                    <div class="control-btn" onclick="adjustToggle(this)">►</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">Launch BackFire</div>
+                <div class="setting-value" data-value="OFF">OFF</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustToggle(this)">◄</div>
+                    <div class="control-btn" onclick="adjustToggle(this)">►</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">Launch RPM</div>
+                <div class="setting-value" data-value="7000" data-step="100">7000</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustValue(this, -100)">◄</div>
+                    <div class="control-btn" onclick="adjustValue(this, 100)">►</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">Launch Max TPS%</div>
+                <div class="setting-value" data-value="85.1" data-step="0.1">85.1</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustValue(this, -0.1)">◄</div>
+                    <div class="control-btn" onclick="adjustValue(this, 0.1)">►</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">Launch End Speed</div>
+                <div class="setting-value" data-value="10" data-step="1">10</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustValue(this, -1)">◄</div>
+                    <div class="control-btn" onclick="adjustValue(this, 1)">►</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">Launch Sound</div>
+                <div class="setting-value" data-value="5" data-step="1">5</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustValue(this, -1)">◄</div>
+                    <div class="control-btn" onclick="adjustValue(this, 1)">►</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Engine Settings Panel -->
+        <div id="settingsPanel" class="settings-panel">
+            <div class="page-title">Setting</div>
+            
+            <div class="setting-row">
+                <div class="setting-label">Target Idle RPM offset</div>
+                <div class="setting-value" data-value="0" data-step="10">0</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustValue(this, -10)">◄</div>
+                    <div class="control-btn" onclick="adjustValue(this, 10)">►</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">Engine RPM Limit</div>
+                <div class="setting-value" data-value="10500" data-step="100">10500</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustValue(this, -100)">◄</div>
+                    <div class="control-btn" onclick="adjustValue(this, 100)">►</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">Coolant Fan</div>
+                <div class="setting-value" data-value="80" data-step="1">80</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustValue(this, -1)">◄</div>
+                    <div class="control-btn" onclick="adjustValue(this, 1)">►</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">VVA Switch RPM</div>
+                <div class="setting-value" data-value="5900" data-step="100">5900</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustValue(this, -100)">◄</div>
+                    <div class="control-btn" onclick="adjustValue(this, 100)">►</div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <div class="setting-label">Wheel Speed Gain</div>
+                <div class="setting-value" data-value="0.5" data-step="0.1">0.5</div>
+                <div class="setting-controls">
+                    <div class="control-btn" onclick="adjustValue(this, -0.1)">◄</div>
+                    <div class="control-btn" onclick="adjustValue(this, 0.1)">►</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TPS Reset Panel -->
+        <div id="tpsResetPanel" class="settings-panel">
+            <div class="page-title">TPS Reset</div>
+            
+            <div class="tps-reset-circle">
+                <div class="tps-percentage" id="tpsPercent">0.0%</div>
+                <div class="tps-range">
+                    <div>MAX <span id="tpsMax">0.0</span>v</div>
+                    <div>MIN <span id="tpsMin">0.0</span>v</div>
+                </div>
+                <div class="tps-indicator"></div>
+            </div>
+
+            <button class="reset-btn" onclick="startTPSReset()">Start Reset</button>
+        </div>
+    </div>
+    <div id="mapsPanel" class="settings-panel">
+    <div class="page-title">MAPs</div>
+    <!-- TPS Calibration Controls -->
+<div style="display: flex; gap: 10px; justify-content: center; margin: 20px 0;">
+  <button class="reset-btn" onclick="setTpsLow()">Set TPS Low</button>
+  <button class="reset-btn" onclick="setTpsHigh()">Set TPS High</button>
+</div>
+<div style="text-align: center; margin: 10px 0; font-size: 14px; color: #ffd700;">
+  <span id="tpsLowStatus">LOW: -- V</span> | 
+  <span id="tpsHighStatus">HIGH: -- V</span>
+</div>
+<button class="reset-btn" onclick="lockTpsRange()" id="lockBtn" style="background: linear-gradient(135deg, #2c7, #2a5);">🔒 Lock TPS Range</button>
+<button class="reset-btn" onclick="startTPSReset()" id="startResetBtn" disabled>Start Reset</button>
+    
+    <!-- Current Map Info -->
+    <div class="map-info-card">
+        <div class="map-info-label">Calibration data in use</div>
+        <div class="map-info-content">
+            <div class="map-detail">
+                <span class="map-detail-label">Model:</span>
+                <span class="map-detail-value" id="currentModel">Z1_36_10_01</span>
+            </div>
+            <div class="map-detail">
+                <span class="map-detail-label">Table ID:</span>
+                <span class="map-detail-value" id="currentTableId">01_36_10_01</span>
+            </div>
+            <div class="map-detail">
+                <span class="map-detail-label">V.E.C.A:</span>
+                <span class="map-detail-value" id="currentVeca">01.56.07.01</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Current Map -->
+    <div class="map-action-section">
+        <button class="map-action-btn" onclick="showSaveMapDialog()">
+            💾 Save Current Map
+        </button>
+    </div>
+
+    <!-- Stored Maps List -->
+    <div class="stored-maps-section">
+        <div class="section-title">List of stored MAP</div>
+        <div id="storedMapsList" class="stored-maps-list">
+            <!-- Maps will be populated here -->
+        </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="map-bottom-actions">
+        <button class="map-btn-secondary" onclick="importMapFile()">
+            📁 Import Map
+        </button>
+        <button class="map-btn-secondary" onclick="exportMapFile()">
+            📤 Export Map
+        </button>
+    </div>
+</div>
+
+<!-- Save Map Dialog (Hidden) -->
+<div id="saveMapDialog" class="modal-overlay">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Save Current Engine Map</h3>
+            <div class="modal-close" onclick="closeSaveMapDialog()">✕</div>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Map Name*</label>
+                <input type="text" id="mapNameInput" class="map-input" placeholder="e.g., test 1" maxlength="30">
+            </div>
+            <div class="form-group">
+                <label>Model</label>
+                <input type="text" id="mapModelInput" class="map-input" value="Z1_36_10_01" readonly>
+            </div>
+            <div class="form-group">
+                <label>Table ID</label>
+                <input type="text" id="mapTableInput" class="map-input" value="01_36_10_01" readonly>
+            </div>
+            <div class="form-group">
+                <label>V.E.C.A</label>
+                <input type="text" id="mapVecaInput" class="map-input" value="01.56.07.01" readonly>
+            </div>
+            <div class="form-group">
+                <label>Notes (optional)</label>
+                <textarea id="mapNotesInput" class="map-textarea" rows="3" placeholder="Add notes about this map..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-cancel" onclick="closeSaveMapDialog()">CANCEL</button>
+            <button class="btn-save" onclick="saveMapToStorage()">SAVE</button>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden file input for import -->
+<input type="file" id="mapFileInput" accept=".umap,.json" style="display: none;">
+
+    <!-- Menu Sidebar -->
+    <div class="menu-backdrop" id="menuBackdrop"></div>
+    <div class="menu-overlay" id="menuOverlay">
+        <div class="menu-header">
+            <div class="logo-brand">
+                <div class="brand-uma">uma</div>
+                <div class="brand-racing">racing</div>
+            </div>
+            <div class="menu-close" id="menuClose">✕</div>
+        </div>
+        <div class="menu-item" onclick="showView('dashboard')">
+            <span class="menu-icon">📊</span>
+            <span>Monitor</span>
+        </div>
+        <div class="menu-item" onclick="showView('fuel')">
+            <span class="menu-icon">💧</span>
+            <span>Fuel</span>
+        </div>
+        <div class="menu-item" onclick="showView('fueltemp')">
+            <span class="menu-icon">🌡️</span>
+            <span>Fuel Temp. Comp.</span>
+        </div>
+        <div class="menu-item" onclick="showView('targetafr')">
+            <span class="menu-icon">🎯</span>
+            <span>Target AFR</span>
+        </div>
+        <div class="menu-item" onclick="showView('autotuning')">
+            <span class="menu-icon">🔧</span>
+            <span>Auto Tuning</span>
+        </div>
+        <div class="menu-item" onclick="showView('ignition')">
+            <span class="menu-icon">🚀</span>
+            <span>Ignition</span>
+        </div>
+        <div class="menu-item" onclick="showView('backfire')">
+            <span class="menu-icon">🔊</span>
+            <span>Backfire</span>
+        </div>
+        <div class="menu-item" onclick="showView('settings')">
+            <span class="menu-icon">⚙️</span>
+            <span>Eng. Settings</span>
+        </div>
+        <div class="menu-item" onclick="showView('tpsreset')">
+            <span class="menu-icon">⭕</span>
+            <span>TPS Reset</span>
+        </div>
+        <div class="menu-item" onclick="showView('maps')">
+            <span class="menu-icon">📁</span>
+            <span>MAPs</span>
+        </div>
+        <div class="menu-item" onclick="showView('log')">
+            <span class="menu-icon">📜</span>
+            <span>Log View</span>
+        </div>
+        <div class="menu-item" onclick="showView('malfunction')">
+            <span class="menu-icon">🔔</span>
+            <span>Malf. Code</span>
+        </div>
+        <div class="menu-item" onclick="showView('system')">
+            <span class="menu-icon">⚙️</span>
+            <span>Sys. Settings</span>
+        </div>
+        <div class="menu-item" onclick="showView('cloud')">
+            <span class="menu-icon">☁️</span>
+            <span>Cloud Data</span>
+        </div>
+        <div class="menu-item" onclick="showView('upgrade')">
+            <span class="menu-icon">🛒</span>
+            <span>Upgrade</span>
+        </div>
+    </div>
+
+    <!-- Bottom Navigation -->
+    <div class="bottom-nav">
+        <div class="nav-btn" onclick="showInfo()">ℹ️</div>
+        <div class="nav-btn" onclick="scrollDown()">⬇️</div>
+        <div class="nav-btn" onclick="scrollUp()">⬆️</div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div class="toast" id="toast"></div>
+
+    <script>
+        // Menu Toggle
+        const menuToggle = document.getElementById('menuToggle');
+        const menuClose = document.getElementById('menuClose');
+        const menuOverlay = document.getElementById('menuOverlay');
+        const menuBackdrop = document.getElementById('menuBackdrop');
+
+        function openMenu() {
+            menuOverlay.classList.add('active');
+            menuBackdrop.classList.add('active');
+        }
+
+        function closeMenu() {
+            menuOverlay.classList.remove('active');
+            menuBackdrop.classList.remove('active');
+        }
+
+        menuToggle.addEventListener('click', openMenu);
+        menuClose.addEventListener('click', closeMenu);
+        menuBackdrop.addEventListener('click', closeMenu);
+
+        // Prevent body scroll when menu is open
+        menuOverlay.addEventListener('touchmove', function(e) {
+            e.stopPropagation();
+        }, { passive: true });
+
+        // View Management
+        function showView(view) {
+            // Hide all panels
+            document.querySelectorAll('.settings-panel').forEach(panel => {
+                panel.classList.remove('active');
+            });
+            
+            const dashboardView = document.getElementById('dashboardView');
+            
+            // Show selected view
+            if (view === 'dashboard') {
+                dashboardView.classList.remove('hidden');
+                showToast('Monitor View');
+            } else if (view === 'backfire') {
+                dashboardView.classList.add('hidden');
+                document.getElementById('backfirePanel').classList.add('active');
+                showToast('Backfire Settings');
+            } else if (view === 'settings') {
+                dashboardView.classList.add('hidden');
+                document.getElementById('settingsPanel').classList.add('active');
+                showToast('Engine Settings');
+            } else if (view === 'tpsreset') {
+                dashboardView.classList.add('hidden');
+                document.getElementById('tpsResetPanel').classList.add('active');
+                showToast('TPS Reset');
+            } else {
+                dashboardView.classList.add('hidden');
+                showToast(view.charAt(0).toUpperCase() + view.slice(1) + ' - Coming Soon');
+            }
+
+            // Close menu
+            closeMenu();
+            
+            // Scroll to top
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Adjust numeric values
+        function adjustValue(btn, delta) {
+            const valueElement = btn.parentElement.previousElementSibling;
+            let currentValue = parseFloat(valueElement.getAttribute('data-value'));
+            
+            // Update value
+            currentValue += delta;
+            
+            // Apply constraints based on the setting
+            const label = valueElement.previousElementSibling.textContent;
+            
+            if (label.includes('RPM')) {
+                currentValue = Math.max(0, Math.min(15000, currentValue));
+            } else if (label.includes('TPS')) {
+                currentValue = Math.max(0, Math.min(100, currentValue));
+            } else if (label.includes('Speed')) {
+                currentValue = Math.max(0, Math.min(300, currentValue));
+            } else if (label.includes('Gain')) {
+                currentValue = Math.max(0, Math.min(10, currentValue));
+            } else if (label.includes('Coolant')) {
+                currentValue = Math.max(0, Math.min(120, currentValue));
+            } else if (label.includes('Sound')) {
+                currentValue = Math.max(1, Math.min(10, currentValue));
+            }
+            
+            // Format display
+            let displayValue;
+            if (Math.abs(delta) < 1) {
+                displayValue = currentValue.toFixed(1);
+            } else {
+                displayValue = Math.round(currentValue).toString();
+            }
+            
+            // Update element
+            valueElement.setAttribute('data-value', currentValue);
+            valueElement.textContent = displayValue;
+            
+            // Visual feedback
+            valueElement.style.transform = 'scale(1.1)';
+            setTimeout(() => {
+                valueElement.style.transform = 'scale(1)';
+            }, 200);
+        }
+
+        // Toggle ON/OFF values
+        function adjustToggle(btn) {
+            const valueElement = btn.parentElement.previousElementSibling;
+            const currentValue = valueElement.getAttribute('data-value');
+            
+            const newValue = currentValue === 'OFF' ? 'ON' : 'OFF';
+            
+            valueElement.setAttribute('data-value', newValue);
+            valueElement.textContent = newValue;
+            
+            // Visual feedback
+            valueElement.style.transform = 'scale(1.1)';
+            setTimeout(() => {
+                valueElement.style.transform = 'scale(1)';
+            }, 200);
+        }
+
+        // TPS Reset Function
+        function startTPSReset() {
+  if (!tpsLocked) {
+    showToast('Please lock TPS range first');
+    return;
+  }
+
+  const tpsPercent = document.getElementById('tpsPercent');
+  const tpsMax = document.getElementById('tpsMax');
+  const tpsMin = document.getElementById('tpsMin');
+
+  showToast('TPS Reset Started...');
+
+  // Simulasikan proses kalibrasi berdasarkan range yang sudah di-lock
+  let progress = 0;
+  const interval = setInterval(() => {
+    progress += 5;
+    if (progress <= 100) {
+      tpsPercent.textContent = progress.toFixed(1) + '%';
+      // Interpolasi antara TPS Low dan High
+      const currentVoltage = tpsLowValue + (tpsHighValue - tpsLowValue) * (progress / 100);
+      tpsMax.textContent = tpsHighValue.toFixed(3);
+      tpsMin.textContent = tpsLowValue.toFixed(3);
+    } else {
+      clearInterval(interval);
+      showToast('✅ TPS Calibration Complete!');
+    }
+  }, 80);
+}
+        // TPS Calibration State
+let tpsLowValue = null;
+let tpsHighValue = null;
+let tpsLocked = false;
+
+function setTpsLow() {
+  if (tpsLocked) {
+    showToast('Unlock TPS range first');
+    return;
+  }
+  // Simulasi bacaan sensor TPS (misal dari ECU)
+  const simulatedVoltage = (Math.random() * 0.5 + 0.2).toFixed(3); // contoh: 0.2V - 0.7V
+  tpsLowValue = parseFloat(simulatedVoltage);
+  document.getElementById('tpsLowStatus').textContent = `LOW: ${tpsLowValue} V`;
+  updateLockButton();
+  showToast(`TPS Low set to ${tpsLowValue} V`);
+}
+
+function setTpsHigh() {
+  if (tpsLocked) {
+    showToast('Unlock TPS range first');
+    return;
+  }
+  // Simulasi bacaan sensor TPS saat throttle full
+  const simulatedVoltage = (Math.random() * 1.5 + 3.8).toFixed(3); // contoh: 3.8V - 5.3V
+  tpsHighValue = parseFloat(simulatedVoltage);
+  document.getElementById('tpsHighStatus').textContent = `HIGH: ${tpsHighValue} V`;
+  updateLockButton();
+  showToast(`TPS High set to ${tpsHighValue} V`);
+}
+
+function updateLockButton() {
+  const lockBtn = document.getElementById('lockBtn');
+  const startBtn = document.getElementById('startResetBtn');
+  
+  if (tpsLowValue !== null && tpsHighValue !== null) {
+    lockBtn.disabled = false;
+    lockBtn.innerHTML = tpsLocked ? '🔓 Unlock TPS' : '🔒 Lock TPS Range';
+    lockBtn.style.background = tpsLocked 
+      ? 'linear-gradient(135deg, #e63946, #dc2f02)' 
+      : 'linear-gradient(135deg, #2c7, #2a5)';
+    startBtn.disabled = !tpsLocked;
+  } else {
+    lockBtn.disabled = true;
+    startBtn.disabled = true;
+  }
+}
+
+function lockTpsRange() {
+  if (tpsLowValue === null || tpsHighValue === null) {
+    showToast('Set both TPS Low and High first');
+    return;
+  }
+  tpsLocked = !tpsLocked;
+  updateLockButton();
+  if (tpsLocked) {
+    showToast('TPS range locked!');
+  } else {
+    showToast('TPS range unlocked');
+  }
+}
+
+        // Toast Notification
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2000);
+        }
+
+        // Scroll Functions
+        function scrollDown() {
+            window.scrollBy({ 
+                top: window.innerHeight * 0.8, 
+                behavior: 'smooth' 
+            });
+        }
+
+        function scrollUp() {
+            window.scrollBy({ 
+                top: -window.innerHeight * 0.8, 
+                behavior: 'smooth' 
+            });
+        }
+
+        function showInfo() {
+            showToast('Uma Racing ECU Dashboard v1.0');
+        }
+
+        // Simulate live data updates (optional - uncomment to enable)
+        let simulationRunning = false;
+        
+        function startSimulation() {
+            if (simulationRunning) return;
+            simulationRunning = true;
+            
+            setInterval(() => {
+                // Only update if on dashboard view
+                if (!document.getElementById('dashboardView').classList.contains('hidden')) {
+                    const rpm = document.getElementById('rpmValue');
+                    const currentRPM = parseInt(rpm.textContent);
+                    const targetRPM = Math.floor(Math.random() * 8000);
+                    
+                    // Smooth transition to target RPM
+                    const step = (targetRPM - currentRPM) / 20;
+                    let counter = 0;
+                    
+                    const rpmInterval = setInterval(() => {
+                        counter++;
+                        const newRPM = Math.floor(currentRPM + (step * counter));
+                        rpm.textContent = newRPM;
+                        
+                        if (counter >= 20) {
+                            clearInterval(rpmInterval);
+                        }
+                    }, 50);
+                }
+            }, 2000);
+        }
+
+        // Uncomment the line below to enable live data simulation
+        // startSimulation();
+
+        // Prevent default touch behaviors for better mobile experience
+        document.addEventListener('touchstart', function(e) {
+            if (e.target.classList.contains('control-btn') || 
+                e.target.classList.contains('nav-btn') ||
+                e.target.classList.contains('menu-item')) {
+                e.preventDefault();
+            }
+        }, { passive: false });
+
+        // Handle orientation change
+        window.addEventListener('orientationchange', function() {
+            setTimeout(() => {
+                window.scrollTo(0, 0);
+            }, 100);
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Uma Racing Dashboard Loaded Successfully');
+            showToast('Welcome to Uma Racing ECU');
+        });
+
+        // Keyboard shortcuts (for desktop testing)
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeMenu();
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                scrollUp();
+            } else if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                scrollDown();
+            } else if (e.key === 'm' || e.key === 'M') {
+                if (menuOverlay.classList.contains('active')) {
+                    closeMenu();
+                } else {
+                    openMenu();
+                }
+            }
+        });
+
+        // Battery level simulation
+        setInterval(() => {
+            const battery = document.querySelector('.battery');
+            let level = parseInt(battery.textContent);
+            
+            // Random small fluctuation
+            if (Math.random() > 0.7) {
+                level += Math.random() > 0.5 ? 1 : -1;
+                level = Math.max(0, Math.min(100, level));
+                battery.textContent = level;
+                
+                // Change color based on level
+                if (level < 20) {
+                    battery.style.color = '#ff0000';
+                    battery.style.borderColor = '#ff0000';
+                } else if (level < 50) {
+                    battery.style.color = '#ffd700';
+                    battery.style.borderColor = '#ffd700';
+                } else {
+                    battery.style.color = 'white';
+                    battery.style.borderColor = 'white';
+                }
+            }
+        }, 5000);
+
+        // Add smooth transition for value changes
+        document.querySelectorAll('.setting-value').forEach(element => {
+            element.style.transition = 'transform 0.2s ease';
+        });
+
+        // Touch feedback for all interactive elements
+        const interactiveElements = document.querySelectorAll(
+            '.control-btn, .nav-btn, .menu-item, .reset-btn, .logo-icon, .menu-close'
+        );
+        
+        interactiveElements.forEach(element => {
+            element.addEventListener('touchstart', function() {
+                this.style.opacity = '0.7';
+            }, { passive: true });
+            
+            element.addEventListener('touchend', function() {
+                this.style.opacity = '1';
+            }, { passive: true });
+        });
+
+        // Prevent zoom on double tap for iOS
+        let lastTouchEnd = 0;
+        document.addEventListener('touchend', function(event) {
+            const now = (new Date()).getTime();
+            if (now - lastTouchEnd <= 300) {
+                event.preventDefault();
+            }
+            lastTouchEnd = now;
+        }, false);
+
+        // Add haptic feedback simulation (visual only)
+        function hapticFeedback(element) {
+            element.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                element.style.transform = 'scale(1)';
+            }, 100);
+        }
+
+        // Apply haptic to buttons
+        document.querySelectorAll('.control-btn, .nav-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                hapticFeedback(this);
+            });
+        });
+
+        // Error handling
+        window.addEventListener('error', function(e) {
+            console.error('Error caught:', e.message);
+            showToast('System Error - Please Refresh');
+        });
+
+        // Service worker registration (for offline capability - optional)
+        if ('serviceWorker' in navigator) {
+            // Uncomment to enable offline mode
+            // navigator.serviceWorker.register('/sw.js').then(function(registration) {
+            //     console.log('ServiceWorker registered:', registration);
+            // }).catch(function(err) {
+            //     console.log('ServiceWorker registration failed:', err);
+            // });
+        }
+
+        console.log('%c Uma Racing ECU Dashboard ', 
+            'background: linear-gradient(135deg, #8b2be2, #4b0082); color: white; font-size: 20px; padding: 10px;');
+        console.log('Version: 1.0.0');
+        console.log('Status: Ready');
+        // Initialize maps storage
+function initMapsStorage() {
+    if (!localStorage.getItem('ecuMaps')) {
+        localStorage.setItem('ecuMaps', JSON.stringify([]));
+    }
+    loadStoredMaps();
+}
+
+// Show save map dialog
+function showSaveMapDialog() {
+    document.getElementById('saveMapDialog').classList.add('active');
+    document.getElementById('mapNameInput').value = '';
+    document.getElementById('mapNotesInput').value = '';
+}
+
+// Close save map dialog
+function closeSaveMapDialog() {
+    document.getElementById('saveMapDialog').classList.remove('active');
+}
+
+// Save map to storage
+function saveMapToStorage() {
+    const mapName = document.getElementById('mapNameInput').value.trim();
+    
+    if (!mapName) {
+        showToast('Please enter a map name');
+        return;
+    }
+    
+    // Get current map data
+    const mapData = {
+        id: 'map_' + Date.now(),
+        name: mapName,
+        model: document.getElementById('mapModelInput').value,
+        tableId: document.getElementById('mapTableInput').value,
+        veca: document.getElementById('mapVecaInput').value,
+        notes: document.getElementById('mapNotesInput').value.trim(),
+        date: new Date().toISOString(),
+        // Simulated calibration data (in real app, this would be actual ECU data)
+        data: generateSimulatedMapData()
+    };
+    
+    // Get existing maps
+    let maps = JSON.parse(localStorage.getItem('ecuMaps') || '[]');
+    
+    // Add new map
+    maps.unshift(mapData);
+    
+    // Limit to 20 maps
+    if (maps.length > 20) {
+        maps = maps.slice(0, 20);
+    }
+    
+    // Save to storage
+    localStorage.setItem('ecuMaps', JSON.stringify(maps));
+    
+    // Close dialog and refresh list
+    closeSaveMapDialog();
+    loadStoredMaps();
+    showToast('Map saved successfully: ' + mapName);
+}
+
+// Generate simulated map data (binary-like structure, ~2-5KB)
+function generateSimulatedMapData() {
+    return {
+        fuelMap: Array(10).fill(0).map(() => Array(10).fill(0).map(() => Math.floor(Math.random() * 200))),
+        ignitionMap: Array(10).fill(0).map(() => Array(10).fill(0).map(() => Math.floor(Math.random() * 40))),
+        targetAFR: Array(10).fill(0).map(() => (12 + Math.random() * 3).toFixed(2)),
+        settings: {
+            rpmLimit: 10500,
+            coolantFan: 92,
+            vvaSwitch: 6000,
+            wheelSpeedGain: 1.0
+        }
+    };
+}
+
+// Load and display stored maps
+function loadStoredMaps() {
+    const mapsList = document.getElementById('storedMapsList');
+    const maps = JSON.parse(localStorage.getItem('ecuMaps') || '[]');
+    
+    if (maps.length === 0) {
+        mapsList.innerHTML = `
+            <div class="empty-maps">
+                <div class="empty-maps-icon">📁</div>
+                <div class="empty-maps-text">No saved maps yet<br>Tap "Save Current Map" to begin</div>
+            </div>
+        `;
+        return;
+    }
+    
+    mapsList.innerHTML = maps.map(map => `
+        <div class="map-item" data-id="${map.id}">
+            <div class="map-item-header">
+                <div class="map-item-name">${escapeHtml(map.name)}</div>
+                <div class="map-item-date">${formatMapDate(map.date)}</div>
+            </div>
+            <div class="map-item-details">
+                Table ID: ${escapeHtml(map.tableId)}<br>
+                V.E.C.A: ${escapeHtml(map.veca)}
+                ${map.notes ? '<br>Notes: ' + escapeHtml(map.notes) : ''}
+            </div>
+            <div class="map-item-actions">
+                <button class="map-item-btn load" onclick="loadMap('${map.id}')">📥 Load</button>
+                <button class="map-item-btn" onclick="exportSingleMap('${map.id}')">💾 Export</button>
+                <button class="map-item-btn delete" onclick="deleteMap('${map.id}')">🗑️ Delete</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Format date for display
+function formatMapDate(isoDate) {
+    const date = new Date(isoDate);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Load map from storage
+function loadMap(mapId) {
+    const maps = JSON.parse(localStorage.getItem('ecuMaps') || '[]');
+    const map = maps.find(m => m.id === mapId);
+    
+    if (!map) {
+        showToast('Map not found');
+        return;
+    }
+    
+    // In real app, this would load data to ECU
+    // For demo, just update current info
+    document.getElementById('currentModel').textContent = map.model;
+    document.getElementById('currentTableId').textContent = map.tableId;
+    document.getElementById('currentVeca').textContent = map.veca;
+    
+    showToast('Map loaded: ' + map.name);
+}
+
+// Delete map
+function deleteMap(mapId) {
+    if (!confirm('Are you sure you want to delete this map?')) {
+        return;
+    }
+    
+    let maps = JSON.parse(localStorage.getItem('ecuMaps') || '[]');
+    maps = maps.filter(m => m.id !== mapId);
+    localStorage.setItem('ecuMaps', JSON.stringify(maps));
+    
+    loadStoredMaps();
+    showToast('Map deleted');
+}
+
+// Export single map to file
+function exportSingleMap(mapId) {
+    const maps = JSON.parse(localStorage.getItem('ecuMaps') || '[]');
+    const map = maps.find(m => m.id === mapId);
+    
+    if (!map) {
+        showToast('Map not found');
+        return;
+    }
+    
+    downloadMapFile(map);
+}
+
+// Export all maps
+function exportMapFile() {
+    const maps = JSON.parse(localStorage.getItem('ecuMaps') || '[]');
+    
+    if (maps.length === 0) {
+        showToast('No maps to export');
+        return;
+    }
+    
+    const exportData = {
+        version: '1.0',
+        exported: new Date().toISOString(),
+        maps: maps
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'uma_ecu_maps_' + Date.now() + '.umap';
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showToast('All maps exported');
+}
+
+// Download single map file
+function downloadMapFile(map) {
+    const blob = new Blob([JSON.stringify(map, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'map_' + map.name.replace(/[^a-z0-9]/gi, '_') + '_' + Date.now() + '.umap';
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showToast('Map exported: ' + map.name);
+}
+
+// Import map file
+function importMapFile() {
+    const fileInput = document.getElementById('mapFileInput');
+    fileInput.onchange = handleMapFileImport;
+    fileInput.click();
+}
+
+// Handle file import
+function handleMapFileImport(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            
+            // Check if it's a single map or multiple maps
+            if (data.maps && Array.isArray(data.maps)) {
+                // Multiple maps
+                importMultipleMaps(data.maps);
+            } else if (data.id || data.name) {
+                // Single map
+                importSingleMap(data);
+            } else {
+                showToast('Invalid map file format');
+            }
+        } catch (error) {
+            showToast('Error reading map file');
+            console.error(error);
+        }
+    };
+    reader.readAsText(file);
+    
+    // Reset file input
+    event.target.value = '';
+}
+
+// Import single map
+function importSingleMap(mapData) {
+    let maps = JSON.parse(localStorage.getItem('ecuMaps') || '[]');
+    
+    // Assign new ID and date
+    mapData.id = 'map_' + Date.now();
+    mapData.imported = new Date().toISOString();
+    
+    maps.unshift(mapData);
+    
+    if (maps.length > 20) {
+        maps = maps.slice(0, 20);
+    }
+    
+    localStorage.setItem('ecuMaps', JSON.stringify(maps));
+    loadStoredMaps();
+    showToast('Map imported: ' + mapData.name);
+}
+
+// Import multiple maps
+function importMultipleMaps(importedMaps) {
+    let maps = JSON.parse(localStorage.getItem('ecuMaps') || '[]');
+    
+    importedMaps.forEach(mapData => {
+        mapData.id = 'map_' + Date.now() + '_' + Math.random();
+        mapData.imported = new Date().toISOString();
+        maps.unshift(mapData);
+    });
+    
+    if (maps.length > 20) {
+        maps = maps.slice(0, 20);
+    }
+    
+    localStorage.setItem('ecuMaps', JSON.stringify(maps));
+    loadStoredMaps();
+    showToast(importedMaps.length + ' maps imported');
+}
+
+// Update showView function to include maps
+const originalShowView = showView;
+function showView(view) {
+    if (view === 'maps') {
+        document.querySelectorAll('.settings-panel').forEach(panel => {
+            panel.classList.remove('active');
+        });
+        document.getElementById('dashboardView').classList.add('hidden');
+        document.getElementById('mapsPanel').classList.add('active');
+        showToast('MAPs');
+        closeMenu();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else {
+        originalShowView(view);
+    }
+}
+
+// Initialize maps on page load
+document.addEventListener('DOMContentLoaded', function() {
+    initMapsStorage();
+});
+    </script>
+
+</body>
+</html>
+        
