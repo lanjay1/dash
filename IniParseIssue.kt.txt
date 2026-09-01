@@ -1,8 +1,0 @@
-package com.ztune.app.domain.ini.model
-
-/** Catatan baris yang tidak bisa diparse; parsing tetap berlanjut (toleran). */
-data class IniParseIssue(
-    val lineNumber: Int,
-    val rawLine: String,
-    val message: String
-)

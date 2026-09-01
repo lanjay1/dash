@@ -1,0 +1,69 @@
+<resources>
+    <string name="app_name">LibreTune</string>
+
+    <!-- Navigation labels -->
+    <string name="nav_home">Home</string>
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_tune_editor">Tune</string>
+    <string name="nav_datalog">Datalog</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Connection -->
+    <string name="conn_title">ECU Connection</string>
+    <string name="conn_status_disconnected">Disconnected</string>
+    <string name="conn_status_connecting">Connecting…</string>
+    <string name="conn_status_connected">Connected</string>
+    <string name="conn_status_error">Error</string>
+    <string name="conn_status_reconnecting">Reconnecting…</string>
+    <string name="conn_disconnect">Disconnect</string>
+    <string name="conn_no_devices">No USB serial devices detected. Connect an ECU via USB-OTG and try again.</string>
+    <string name="conn_demo_button">Connect Demo ECU</string>
+    <string name="conn_devices_section">USB Devices</string>
+
+    <!-- Home -->
+    <string name="home_title">LibreTune</string>
+    <string name="home_subtitle">Open-source ECU tuning for Megasquirt, Speeduino, rusEFI, and more.</string>
+    <string name="home_connection_title">ECU Status</string>
+    <string name="home_not_connected">Not connected — connect an ECU via USB-OTG or use demo mode.</string>
+    <string name="home_connected">Connected: %1$s</string>
+    <string name="home_action_connect">Connect ECU</string>
+    <string name="home_action_dashboard">Open Dashboard</string>
+    <string name="home_action_tune">Open Tune Editor</string>
+
+    <!-- Dashboard -->
+    <string name="dash_title">Dashboard</string>
+    <string name="dash_subtitle">Real-time gauges from ECU output channels.</string>
+    <string name="dash_start_stream">Start Streaming</string>
+    <string name="dash_stop_stream">Stop Streaming</string>
+    <string name="dash_not_connected">Not connected to ECU</string>
+    <string name="dash_connect_hint">Connect an ECU via USB-OTG or use demo mode, then return here.</string>
+
+    <!-- Tune Editor -->
+    <string name="tune_title">Tune Editor</string>
+    <string name="tune_subtitle">Edit VE, ignition, and other tables.</string>
+    <string name="tune_not_connected">Not connected to ECU — editor needs page data.</string>
+    <string name="tune_connect_hint">Connect an ECU or use Demo mode, then return.</string>
+    <string name="tune_load_page">Load Page from ECU</string>
+
+    <!-- Datalog -->
+    <string name="dl_title">Datalog</string>
+    <string name="dl_subtitle">Record ECU data and export CSV logs.</string>
+    <string name="dl_start">Start Recording</string>
+    <string name="dl_stop">Stop &amp; Save</string>
+    <string name="dl_not_connected">ECU connection required for recording.</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_appearance">Appearance</string>
+    <string name="settings_theme">Theme</string>
+    <string name="theme_system">Follow system</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="settings_usb_section">USB Connection</string>
+    <string name="settings_usb_baud">Baud rate</string>
+    <string name="settings_reconnect_section">Auto-reconnect</string>
+    <string name="settings_auto_reconnect">Auto-reconnect on disconnect</string>
+    <string name="settings_max_attempts">Max attempts</string>
+    <string name="settings_delay">Delay between attempts</string>
+    <string name="settings_delay_fmt">%1$d ms</string>
+</resources>
