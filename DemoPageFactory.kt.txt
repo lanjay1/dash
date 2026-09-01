@@ -1,0 +1,49 @@
+package com.ztune.app.domain.protocol
+
+import com.ztune.app.domain.memory.ByteOrderWriter
+
+/**
+ * Isi page demo yang MASUK AKAL sesuai layout BundledEcuDefinition — dipakai
+ * mode demo (FakeEcu.pageOverrides) sehingga bins/tabel terdecode sebagai
+ * kurva nyata, dan AutoTune demo berjalan meyakinkan. Layout dikopling ke INI
+ * bawaan dan dijaga oleh DemoPageFactoryTest.
+ */
+object DemoPageFactory {
+
+    // Offset layout (harus sama dengan INI bawaan)
+    private const val OFF_DEMO_LIMIT = 0
+    private const val OFF_DEMO_BINS = 8
+    private const val OFF_VE_MAP = 16
+    private const val OFF_VE_RPM = 80
+    private const val OFF_VE_CLT = 96
+    private const val OFF_IGN_MAP = 104
+    private const val OFF_IGN_RPM = 168
+    private const val OFF_IGN_CLT = 184
+
+    /** VE fisik: baris = CLT (0 = paling dingin), kolom = RPM. 30% dingin → 72% warm. */
+    fun veValue(row: Int, col: Int): Double = 30.0 + 6.0 * col - 2.0 * (7 - row)
+
+    /** Advance fisik: 6.5° dingin-idle → 24° warm-high-rpm. */
+    fun ignValue(row: Int, col: Int): Double = 10.0 + 2.0 * col - 0.5 * (7 - row)
+
+    fun page0(size: Int = 256): ByteArray {
+        val b = ByteArray(size)
+        ByteOrderWriter.u8(b, OFF_DEMO_LIMIT, 100)
+        for (i in 0 until 8) ByteOrderWriter.u8(b, OFF_DEMO_BINS + i, (i + 1) * 10)
+        // Bins RPM: raw = nilai/100 → 800..6400 RPM
+        for (i in 0 until 8) ByteOrderWriter.u16(b, OFF_VE_RPM + 2 * i, 8 * (i + 1))
+        for (i in 0 until 8) ByteOrderWriter.u16(b, OFF_IGN_RPM + 2 * i, 8 * (i + 1))
+        // Bins CLT: raw = nilai + 40 → -40..100 °C (U08 translate -40)
+        for (i in 0 until 8) ByteOrderWriter.u8(b, OFF_VE_CLT + i, i * 20)
+        for (i in 0 until 8) ByteOrderWriter.u8(b, OFF_IGN_CLT + i, i * 20)
+        // Grid VE (U08, scale 0.5) & ignition (S08, scale 0.5) — semua nilai persis ter-representasi
+        for (r in 0 until 8) for (c in 0 until 8) {
+            ByteOrderWriter.u8(b, OFF_VE_MAP + (r * 8 + c), Math.round(veValue(r, c) / 0.5).toInt())
+            ByteOrderWriter.s8(b, OFF_IGN_MAP + (r * 8 + c), Math.round(ignValue(r, c) / 0.5).toInt())
+        }
+        return b
+    }
+
+    /** Page 1 mengikuti pola default FakeEcu (dipakai EcuMemoryReaderTest). */
+    fun page1(size: Int = 64): ByteArray = ByteArray(size) { ((it * 13) + 100).toByte() }
+}

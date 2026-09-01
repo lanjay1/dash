@@ -1,0 +1,71 @@
+package com.ztune.app.domain.protocol
+
+/**
+ * Builder payload command MegaSquirt-style (kompatibel rusEFI).
+ * FASE 4: lengkap untuk read/write/burn/CRC-check. Command word selalu BIG-endian
+ * di wire. ⚠️ VERIFIKASI-HARDWARE: kalau ECU asli tak merespons, periksa endian di sini.
+ */
+object MsCommands {
+
+    fun query(commandTemplate: String = "Q"): ByteArray {
+        val c = commandTemplate.trim().firstOrNull() ?: 'Q'
+        return byteArrayOf(c.code.toByte())
+    }
+
+    /** pageReadCommand "R%2i%2o%2c" → 'R' + page + offset + count (u16BE). */
+    fun readChunk(page: Int, offset: Int, count: Int): ByteArray {
+        require(page in 0..0xFFFF) { "page di luar range: $page" }
+        require(offset in 0..0xFFFF) { "offset di luar range: $offset" }
+        require(count in 1..0xFFFF) { "count di luar range: $count" }
+        val out = ByteArray(7)
+        out[0] = 'R'.code.toByte()
+        MsEnvelopeCodec.writeU16BE(out, 1, page)
+        MsEnvelopeCodec.writeU16BE(out, 3, offset)
+        MsEnvelopeCodec.writeU16BE(out, 5, count)
+        return out
+    }
+
+    /** ochGetCommand "O%2o%2c" → 'O' + offset + count (u16BE). */
+    fun outputChannels(offset: Int, count: Int): ByteArray {
+        require(offset in 0..0xFFFF) { "offset di luar range: $offset" }
+        require(count in 1..0xFFFF) { "count di luar range: $count" }
+        val out = ByteArray(5)
+        out[0] = 'O'.code.toByte()
+        MsEnvelopeCodec.writeU16BE(out, 1, offset)
+        MsEnvelopeCodec.writeU16BE(out, 3, count)
+        return out
+    }
+
+    /** pageChunkWrite "C%2i%2o%2c%v" → 'C' + page + offset + count (u16BE) + data. */
+    fun writeChunk(page: Int, offset: Int, data: ByteArray): ByteArray {
+        require(page in 0..0xFFFF) { "page di luar range: $page" }
+        require(offset in 0..0xFFFF) { "offset di luar range: $offset" }
+        require(data.size in 1..0xFFFF) { "jumlah data tidak valid: ${data.size}" }
+        val out = ByteArray(7 + data.size)
+        out[0] = 'C'.code.toByte()
+        MsEnvelopeCodec.writeU16BE(out, 1, page)
+        MsEnvelopeCodec.writeU16BE(out, 3, offset)
+        MsEnvelopeCodec.writeU16BE(out, 5, data.size)
+        data.copyInto(out, 7)
+        return out
+    }
+
+    /** burnCommand "B%2i" → 'B' + page (u16BE). */
+    fun burn(page: Int): ByteArray {
+        require(page in 0..0xFFFF) { "page di luar range: $page" }
+        return byteArrayOf('B'.code.toByte(), (page shr 8).toByte(), page.toByte())
+    }
+
+    /** crc32CheckCommand "k%2i%2o%2c" → 'k' + page + offset + count (u16BE). */
+    fun crc32Region(page: Int, offset: Int, count: Int): ByteArray {
+        require(page in 0..0xFFFF) { "page di luar range: $page" }
+        require(offset in 0..0xFFFF) { "offset di luar range: $offset" }
+        require(count in 1..0xFFFF) { "count di luar range: $count" }
+        val out = ByteArray(7)
+        out[0] = 'k'.code.toByte()
+        MsEnvelopeCodec.writeU16BE(out, 1, page)
+        MsEnvelopeCodec.writeU16BE(out, 3, offset)
+        MsEnvelopeCodec.writeU16BE(out, 5, count)
+        return out
+    }
+}

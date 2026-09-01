@@ -1,0 +1,253 @@
+package com.ztune.app.presentation.datalog
+
+import android.content.Context
+import android.net.Uri
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.ztune.app.R
+import com.ztune.app.data.definition.EcuDefinitionRepository
+import com.ztune.app.data.repository.DatalogRepository
+import com.ztune.app.data.repository.SessionMeta
+import com.ztune.app.data.transport.EcuConnectionManager
+import com.ztune.app.data.transport.EcuConnectionStatus
+import com.ztune.app.domain.datalog.DatalogCsv
+import com.ztune.app.domain.datalog.DatalogSample
+import com.ztune.app.domain.ini.model.ConstantKind
+import com.ztune.app.domain.memory.LiveDataFrame
+import com.ztune.app.domain.memory.LiveDataStreamer
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+data class ChannelOptionUi(val name: String, val units: String)
+
+data class SessionUi(val id: Long, val name: String, val createdAtMs: Long, val sampleCount: Int)
+
+data class SessionDetailUi(
+    val id: Long,
+    val name: String,
+    val channels: List<String>,
+    val samples: List<DatalogSample>
+)
+
+data class DatalogUiState(
+    val connectionStatus: EcuConnectionStatus = EcuConnectionStatus.DISCONNECTED,
+    val availableChannels: List<ChannelOptionUi> = emptyList(),
+    val selectedChannels: Set<String> = emptySet(),
+    val isRecording: Boolean = false,
+    val recordedCount: Int = 0,
+    val sessions: List<SessionUi> = emptyList(),
+    val openSession: SessionDetailUi? = null,
+    val isLoadingSession: Boolean = false,
+    val isExporting: Boolean = false,
+    val message: String? = null
+)
+
+@HiltViewModel
+class DatalogViewModel @Inject constructor(
+    private val connectionManager: EcuConnectionManager,
+    private val definitionRepository: EcuDefinitionRepository,
+    private val datalogRepository: DatalogRepository,
+    @ApplicationContext private val appContext: Context
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(DatalogUiState())
+    val uiState: StateFlow<DatalogUiState> = _uiState.asStateFlow()
+
+    private var recordJob: Job? = null
+    private var activeSessionId: Long? = null
+    private var recordingChannelSet: Set<String> = emptySet()
+    private val buffer = mutableListOf<LiveDataFrame>()
+
+    init {
+        definitionRepository.ensureBundledLoaded()
+        refreshChannelOptions()
+        viewModelScope.launch {
+            datalogRepository.sessions().collect { rows ->
+                _uiState.update {
+                    it.copy(sessions = rows.map { r -> SessionUi(r.id, r.name, r.createdAtMs, r.sampleCount) })
+                }
+            }
+        }
+        viewModelScope.launch {
+            connectionManager.state.collect { s ->
+                _uiState.update { it.copy(connectionStatus = s.status) }
+                if (s.status != EcuConnectionStatus.CONNECTED && _uiState.value.isRecording) {
+                    stopRecording()
+                }
+            }
+        }
+    }
+
+    private fun refreshChannelOptions() {
+        val def = definitionRepository.definition.value ?: return
+        _uiState.update {
+            it.copy(
+                availableChannels = def.outputChannels.values
+                    .filter { c -> c.kind == ConstantKind.SCALAR }
+                    .sortedBy { c -> c.offset }
+                    .map { c -> ChannelOptionUi(c.name, c.units) }
+            )
+        }
+    }
+
+    fun toggleChannel(name: String) = _uiState.update {
+        it.copy(
+            selectedChannels = if (name in it.selectedChannels) it.selectedChannels - name else it.selectedChannels + name
+        )
+    }
+
+    fun startRecording() {
+        if (recordJob?.isActive == true) return
+        if (!connectionManager.isConnected) {
+            message(appContext.getString(R.string.dl_err_not_connected)); return
+        }
+        val def = definitionRepository.definition.value
+        if (def == null) {
+            message(appContext.getString(R.string.dl_err_no_definition)); return
+        }
+        val channels = _uiState.value.selectedChannels.toList()
+        if (channels.isEmpty()) {
+            message(appContext.getString(R.string.dl_err_no_channel)); return
+        }
+        viewModelScope.launch {
+            try {
+                val sessionId = datalogRepository.createSession(defaultSessionName(), channels)
+                activeSessionId = sessionId
+                recordingChannelSet = channels.toSet()
+                synchronized(buffer) { buffer.clear() }
+                _uiState.update { it.copy(isRecording = true, recordedCount = 0, message = null) }
+                recordJob = viewModelScope.launch {
+                    try {
+                        connectionManager.withClient { client ->
+                            LiveDataStreamer(client, def).stream(periodMs = POLL_PERIOD_MS).collect { frame ->
+                                onFrame(sessionId, frame)
+                            }
+                        }
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        message(appContext.getString(R.string.dl_stream_stopped, e.message ?: ""))
+                    } finally {
+                        flushBuffer(sessionId)
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                message(appContext.getString(R.string.dl_session_create_failed, e.message ?: ""))
+            }
+        }
+    }
+
+    fun stopRecording() {
+        val sessionId = activeSessionId ?: return
+        recordJob?.cancel()
+        recordJob = null
+        viewModelScope.launch {
+            flushBuffer(sessionId)
+            val count = _uiState.value.recordedCount
+            activeSessionId = null
+            _uiState.update { it.copy(isRecording = false) }
+            message(appContext.getString(R.string.dl_saved_fmt, count))
+        }
+    }
+
+    private suspend fun onFrame(sessionId: Long, frame: LiveDataFrame) {
+        val filtered = frame.values.filterKeys { it in recordingChannelSet }
+        synchronized(buffer) { buffer += LiveDataFrame(frame.timestampMs, filtered) }
+        if (buffer.size >= BATCH_SIZE) flushBuffer(sessionId)
+        _uiState.update { it.copy(recordedCount = it.recordedCount + 1) }
+    }
+
+    private suspend fun flushBuffer(sessionId: Long) {
+        val batch = synchronized(buffer) {
+            if (buffer.isEmpty()) return
+            val copy = buffer.toList()
+            buffer.clear()
+            copy
+        }
+        // NonCancellable: buffer tidak boleh hilang saat job dibatalkan (stop/navigasi).
+        withContext(NonCancellable) { datalogRepository.appendFrames(sessionId, batch) }
+    }
+
+    fun openSession(id: Long) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingSession = true, message = null) }
+            try {
+                val meta: SessionMeta? = datalogRepository.sessionMeta(id)
+                if (meta == null) {
+                    _uiState.update { it.copy(isLoadingSession = false, message = "Sesi tidak ditemukan") }
+                    return@launch
+                }
+                val samples = datalogRepository.samples(id)
+                _uiState.update {
+                    it.copy(
+                        isLoadingSession = false,
+                        openSession = SessionDetailUi(meta.id, meta.name, meta.channels, samples)
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoadingSession = false, message = "Gagal memuat sesi: ${e.message}") }
+            }
+        }
+    }
+
+    fun closeSession() = _uiState.update { it.copy(openSession = null) }
+
+    fun deleteSession(id: Long) {
+        viewModelScope.launch {
+            datalogRepository.deleteSession(id)
+            if (_uiState.value.openSession?.id == id) closeSession()
+        }
+    }
+
+    fun exportCsv(uri: Uri) {
+        val session = _uiState.value.openSession ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isExporting = true) }
+            try {
+                val csv = DatalogCsv.build(session.channels, session.samples)
+                withContext(Dispatchers.IO) {
+                    appContext.contentResolver.openOutputStream(uri, "w")?.use { out ->
+                        out.write(csv.toByteArray(Charsets.UTF_8))
+                    } ?: error("Tidak bisa membuka output stream")
+                }
+                _uiState.update { it.copy(isExporting = false, message = appContext.getString(R.string.dl_exported)) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isExporting = false, message = "Export gagal: ${e.message}") }
+            }
+        }
+    }
+
+    fun clearMessage() = _uiState.update { it.copy(message = null) }
+
+    private fun message(text: String) = _uiState.update { it.copy(message = text) }
+
+    private fun defaultSessionName(): String {
+        val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+        return "Log $stamp"
+    }
+
+    companion object {
+        const val POLL_PERIOD_MS = 50L
+        const val BATCH_SIZE = 64
+    }
+}

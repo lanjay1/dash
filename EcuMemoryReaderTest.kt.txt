@@ -1,0 +1,73 @@
+package com.ztune.app.domain.memory
+
+import com.ztune.app.data.transport.FakeEcuTransport
+import com.ztune.app.domain.ini.BundledEcuDefinition
+import com.ztune.app.domain.ini.IniDefinitionParser
+import com.ztune.app.domain.protocol.EcuCommunicationException
+import com.ztune.app.domain.protocol.FakeEcu
+import com.ztune.app.domain.protocol.MsProtocolClient
+import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
+import org.junit.Assert.fail
+import org.junit.Test
+
+class EcuMemoryReaderTest {
+
+    @Test
+    fun `baca page 0 dan decode konstanta dari pola memori fake`() = runBlocking {
+        val definition = IniDefinitionParser().parse(BundledEcuDefinition.INI)
+        val ecu = FakeEcu(pageSize = 256) // page 0: data[i] = (i*7 + 3)
+        val transport = FakeEcuTransport(ecu)
+        transport.connect()
+        try {
+            val reader = EcuMemoryReader(MsProtocolClient(transport), definition)
+            val page = reader.readPage(0)
+            assertEquals(256, page.data.size)
+            // data[0] = 3 → demoLimit (U08 @0, scale 1) = 3.0
+            assertEquals(3.0, page.decodeScalar("demoLimit")!!, 1e-9)
+            // data[8..15] = 59,66,73,80,87,94,101,108
+            assertEquals(
+                listOf(59.0, 66.0, 73.0, 80.0, 87.0, 94.0, 101.0, 108.0),
+                page.decodeArray("demoBins")
+            )
+        } finally {
+            transport.disconnect()
+        }
+    }
+
+    @Test
+    fun `baca page 1 dengan tipe signed dan nilai negatif`() = runBlocking {
+        val definition = IniDefinitionParser().parse(BundledEcuDefinition.INI)
+        val ecu = FakeEcu(pageSize = 256) // page 1: data[i] = (i*13 + 100)
+        val transport = FakeEcuTransport(ecu)
+        transport.connect()
+        try {
+            val reader = EcuMemoryReader(MsProtocolClient(transport), definition)
+            val page = reader.readPage(1)
+            // data[0] = 100 → demoTrim (S08, translate 0) = 100.0
+            assertEquals(100.0, page.decodeScalar("demoTrim")!!, 1e-9)
+            // data[3] = 139 → byte -117 → demoTrim2 (S08) = -117.0
+            assertEquals(-117.0, page.decodeScalar("demoTrim2")!!, 1e-9)
+        } finally {
+            transport.disconnect()
+        }
+    }
+
+    @Test
+    fun `page yang tidak ada di definisi melempar InvalidFrame`() = runBlocking {
+        val definition = IniDefinitionParser().parse(BundledEcuDefinition.INI)
+        val transport = FakeEcuTransport(FakeEcu())
+        transport.connect()
+        try {
+            val reader = EcuMemoryReader(MsProtocolClient(transport), definition)
+            try {
+                reader.readPage(9)
+                fail("Seharusnya InvalidFrame")
+            } catch (e: EcuCommunicationException.InvalidFrame) {
+                // sesuai harapan
+            }
+        } finally {
+            transport.disconnect()
+        }
+    }
+}

@@ -1,0 +1,74 @@
+package com.ztune.app.domain.memory
+
+import com.ztune.app.domain.ini.model.ConstantDefinition
+import com.ztune.app.domain.ini.model.ConstantKind
+import com.ztune.app.domain.ini.model.EcuDefinition
+import com.ztune.app.domain.ini.model.Endianness
+import com.ztune.app.domain.protocol.EcuCommunicationException
+import com.ztune.app.domain.protocol.MsCommands
+import com.ztune.app.domain.protocol.MsProtocolClient
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.isActive
+
+/** Satu snapshot live data: channel → nilai fisik, plus timestamp. */
+data class LiveDataFrame(
+    val timestampMs: Long,
+    val values: Map<String, Double>
+)
+
+/**
+ * Streaming live data dengan polling command 'O' (ochGetCommand) sesuai
+ * ochBlockSize dari definisi INI. Protokol lock-step: satu request-respons
+ * per frame; byte basi antar-poll ditoleransi (resync framer), timeout tetap
+ * membatasi bila ECU diam.
+ */
+class LiveDataStreamer(
+    private val client: MsProtocolClient,
+    private val definition: EcuDefinition,
+    private val timeSource: () -> Long = System::currentTimeMillis
+) {
+
+    val blockSize: Int = definition.commands.ochBlockSize
+        ?: throw IllegalStateException(
+            "ochBlockSize tidak dideklarasikan di definisi INI — live data tidak tersedia"
+        )
+
+    /** Channel numerik (scalar/bits) yang muat di blok; decode per frame. */
+    val numericChannels: List<ConstantDefinition> = definition.outputChannels.values
+        .filter { it.kind == ConstantKind.SCALAR || it.kind == ConstantKind.BITS }
+        .filter { it.offset >= 0 && it.offset + it.byteSize() <= blockSize }
+        .sortedBy { it.offset }
+
+    private val byteOrder = definition.meta.endianness ?: Endianness.LITTLE
+
+    fun stream(periodMs: Long = DEFAULT_PERIOD_MS): Flow<LiveDataFrame> = flow {
+        while (currentCoroutineContext().isActive) {
+            val startedAt = timeSource()
+            val response = client.request(
+                MsCommands.outputChannels(offset = 0, count = blockSize),
+                tolerateFramingErrors = true
+            )
+            val payload = response.payload
+            if (payload.size < blockSize) {
+                throw EcuCommunicationException.InvalidFrame(
+                    "Blok live data pendek: ${payload.size} byte < ochBlockSize $blockSize"
+                )
+            }
+            val values = LinkedHashMap<String, Double>(numericChannels.size)
+            for (channel in numericChannels) {
+                values[channel.name] =
+                    ConstantDecoder.physical(channel, payload, 0, byteOrder) ?: Double.NaN
+            }
+            emit(LiveDataFrame(timestampMs = timeSource(), values = values))
+            val elapsed = timeSource() - startedAt
+            delay((periodMs - elapsed).coerceAtLeast(0))
+        }
+    }
+
+    companion object {
+        const val DEFAULT_PERIOD_MS = 50L
+    }
+}

@@ -1,0 +1,25 @@
+package com.ztune.app.data.transport
+
+import android.hardware.usb.UsbDevice
+import com.ztune.app.domain.protocol.EcuTransport
+import kotlinx.coroutines.flow.Flow
+
+/** Target koneksi — reconnect membutuhkan kemampuan MEMBANGUN ULANG transport. */
+sealed interface EcuTarget {
+    data class Usb(val device: UsbDevice) : EcuTarget
+    data class Demo(val scenario: DemoScenario = DemoScenario.STABLE) : EcuTarget
+}
+
+/**
+ * Pabrik transport + sumber event sistem. Abstraksi ini membuat
+ * EcuConnectionManager bebas Android sehingga reconnect loop bisa di-unit-test.
+ */
+interface EcuTransportSource {
+    suspend fun build(target: EcuTarget): EcuTransport
+
+    /** Apakah perangkat target masih ada (untuk USB: masih ter-enumerasi). */
+    fun deviceStillPresent(target: EcuTarget): Boolean
+
+    /** Event pelepasan device USB oleh sistem (detach broadcast). */
+    val usbDetachEvents: Flow<UsbDevice>
+}

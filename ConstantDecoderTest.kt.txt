@@ -1,0 +1,84 @@
+package com.ztune.app.domain.memory
+
+import com.ztune.app.domain.ini.model.ArrayShape
+import com.ztune.app.domain.ini.model.BitRange
+import com.ztune.app.domain.ini.model.ConstantDefinition
+import com.ztune.app.domain.ini.model.ConstantKind
+import com.ztune.app.domain.ini.model.Endianness
+import com.ztune.app.domain.ini.model.FieldType
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class ConstantDecoderTest {
+
+    private fun scalar(
+        type: FieldType,
+        offset: Int,
+        scale: Double = 1.0,
+        translate: Double = 0.0
+    ) = ConstantDefinition(
+        name = "c", kind = ConstantKind.SCALAR, type = type, page = 1,
+        offset = offset, scale = scale, translate = translate
+    )
+
+    @Test
+    fun `u08 dengan skala 0.1`() {
+        val c = scalar(FieldType.U08, 0, scale = 0.1)
+        assertEquals(14.6, ConstantDecoder.physical(c, byteArrayOf(146.toByte()))!!, 1e-9)
+    }
+
+    @Test
+    fun `s16 dengan translate -40 little endian`() {
+        val c = scalar(FieldType.S16, 0, translate = -40.0)
+        // raw = 24 + 40 = 64 (LE: 64, 0) → 64*1 + (-40) = 24
+        assertEquals(24.0, ConstantDecoder.physical(c, byteArrayOf(64, 0))!!, 1e-9)
+    }
+
+    @Test
+    fun `scale NaN menghasilkan NaN bukan error`() {
+        val c = scalar(FieldType.U08, 0, scale = Double.NaN)
+        assertTrue(ConstantDecoder.physical(c, byteArrayOf(5))!!.isNaN())
+    }
+
+    @Test
+    fun `bits mengekstrak nilai dan label`() {
+        val c = ConstantDefinition(
+            name = "b", kind = ConstantKind.BITS, type = FieldType.BITS, page = 1, offset = 0,
+            bitRange = BitRange(0, 2),
+            labels = listOf("A", "B", "C", "D", "E", "F", "G", "H")
+        )
+        val data = byteArrayOf(0b101)
+        assertEquals(5.0, ConstantDecoder.physical(c, data)!!, 1e-9)
+        assertEquals(listOf("A", "C"), ConstantDecoder.decodeBits(c, data)!!)
+    }
+
+    @Test
+    fun `array u08 row-major dengan skala`() {
+        val c = ConstantDefinition(
+            name = "a", kind = ConstantKind.ARRAY, type = FieldType.U08, page = 1,
+            offset = 1, shape = ArrayShape(1, 4), scale = 2.0
+        )
+        val data = byteArrayOf(0, 1, 2, 3, 4)
+        assertEquals(listOf(2.0, 4.0, 6.0, 8.0), ConstantDecoder.decodeArray(c, data)!!)
+    }
+
+    @Test
+    fun `array di luar bounds mengembalikan null`() {
+        val c = ConstantDefinition(
+            name = "a", kind = ConstantKind.ARRAY, type = FieldType.U16, page = 1,
+            offset = 5, shape = ArrayShape(1, 4)
+        )
+        assertNull(ConstantDecoder.decodeArray(c, ByteArray(6)))
+    }
+
+    @Test
+    fun `string decode sampai NUL`() {
+        val c = ConstantDefinition(
+            name = "s", kind = ConstantKind.STRING, type = FieldType.STRING, page = 1,
+            offset = 0, stringLength = 6
+        )
+        assertEquals("ZTUNE", ConstantDecoder.decodeString(c, "ZTUNE\u0000!".toByteArray())!!)
+    }
+}

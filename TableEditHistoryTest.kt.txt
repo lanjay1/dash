@@ -1,0 +1,85 @@
+package com.ztune.app.domain.table
+
+import com.ztune.app.domain.ini.BundledEcuDefinition
+import com.ztune.app.domain.ini.IniDefinitionParser
+import com.ztune.app.domain.ini.model.Endianness
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class TableEditHistoryTest {
+
+    private fun freshGrid(): TableGrid {
+        val definition = IniDefinitionParser().parse(BundledEcuDefinition.INI)
+        val table = definition.tables.getValue("veTable1Tbl")
+        val map = definition.constants.getValue(table.mapName!!)
+        return TableGrid(table, map, ByteArray(256), Endianness.LITTLE)
+    }
+
+    @Test
+    fun `apply undo redo mengembalikan nilai persis`() {
+        val g = freshGrid()
+        val h = TableEditHistory()
+        h.apply(g, EditBatch("a", listOf(CellEdit(0, 0, 0.0, 50.0))))
+        assertEquals(50.0, g.physical(0, 0)!!, 1e-9)
+        assertTrue(h.canUndo && h.isDirty)
+
+        h.undo(g)
+        assertEquals(0.0, g.physical(0, 0)!!, 1e-9)
+        assertTrue(h.canRedo && !h.isDirty)
+
+        h.redo(g)
+        assertEquals(50.0, g.physical(0, 0)!!, 1e-9)
+        assertTrue(h.isDirty)
+    }
+
+    @Test
+    fun `edit mengubah oldValue menjadi nilai aktual saat apply`() {
+        val g = freshGrid()
+        g.setPhysical(0, 0, 12.5)
+        val h = TableEditHistory()
+        h.apply(g, EditBatch("a", listOf(CellEdit(0, 0, 0.0, 20.0)))) // oldValue 0 salah, aktual 12.5
+        val undone = h.undo(g)!!
+        assertEquals(12.5, undone.edits[0].oldValue, 1e-9)
+    }
+
+    @Test
+    fun `undo melewati titik simpan membuat kotor lagi`() {
+        val g = freshGrid()
+        val h = TableEditHistory()
+        h.apply(g, EditBatch("a", listOf(CellEdit(0, 0, 0.0, 10.0))))
+        h.markSaved()
+        assertFalse(h.isDirty)               // sudah tersimpan
+        h.undo(g)
+        assertTrue(h.isDirty)                // kembali ke kondisi pra-simpan = beda dengan ECU
+        h.redo(g)
+        assertFalse(h.isDirty)
+    }
+
+    @Test
+    fun `apply menghapus redo stack`() {
+        val g = freshGrid()
+        val h = TableEditHistory()
+        h.apply(g, EditBatch("a", listOf(CellEdit(0, 0, 0.0, 10.0))))
+        h.undo(g)
+        h.apply(g, EditBatch("b", listOf(CellEdit(1, 1, 0.0, 20.0))))
+        assertFalse(h.canRedo)
+        assertNull(h.redo(g))
+    }
+
+    @Test
+    fun `interpolasi jadi satu batch undo`() {
+        val g = freshGrid()
+        val h = TableEditHistory()
+        val batch = TableInterpolator.rowWise(
+            g, setOf(CellPos(0, 0), CellPos(0, 4))
+        )!!
+        h.apply(g, batch)
+        // anchor 0.0 dan 0.0 → semua 0.0, batch diterapkan (edits tetap tercatat)
+        assertEquals(3, batch.edits.size)
+        h.undo(g)
+        assertFalse(h.canUndo || h.canRedo && h.canUndo) // sekali undo habis
+    }
+}

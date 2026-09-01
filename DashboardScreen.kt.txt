@@ -1,0 +1,324 @@
+package com.ztune.app.presentation.dashboard
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ztune.app.R
+import com.ztune.app.core.theme.ZTuneTheme
+import com.ztune.app.data.transport.EcuConnectionStatus
+import java.util.Locale
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.sin
+
+private const val GAUGE_START_ANGLE = 135f
+private const val GAUGE_SWEEP_ANGLE = 270f
+
+@Composable
+fun DashboardScreen(
+    onNavigateToConnection: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: DashboardViewModel = hiltViewModel()
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    DashboardContent(
+        uiState = uiState,
+        onStartStreaming = viewModel::startStreaming,
+        onStopStreaming = viewModel::stopStreaming,
+        onNavigateToConnection = onNavigateToConnection,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun DashboardContent(
+    uiState: DashboardUiState,
+    onStartStreaming: () -> Unit,
+    onStopStreaming: () -> Unit,
+    onNavigateToConnection: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val connected = uiState.connectionStatus == EcuConnectionStatus.CONNECTED
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(stringResource(R.string.nav_dashboard), style = MaterialTheme.typography.headlineMedium)
+        Text(
+            stringResource(R.string.dash_subtitle),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = when (uiState.connectionStatus) {
+                    EcuConnectionStatus.CONNECTED -> stringResource(R.string.conn_status_connected)
+                    EcuConnectionStatus.CONNECTING -> stringResource(R.string.conn_status_connecting)
+                    EcuConnectionStatus.ERROR -> stringResource(R.string.conn_status_error)
+                    else -> stringResource(R.string.conn_status_disconnected)
+                },
+                style = MaterialTheme.typography.titleMedium,
+                color = if (connected) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (uiState.isStreaming) {
+                Text(
+                    text = stringResource(R.string.dash_rate_fmt, uiState.rateHz, uiState.sampleCount),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+
+        if (!connected) {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        stringResource(R.string.dash_not_connected),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        stringResource(R.string.dash_connect_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(onClick = onNavigateToConnection) {
+                        Text(stringResource(R.string.dash_button_connect))
+                    }
+                }
+            }
+        } else {
+            Button(
+                onClick = if (uiState.isStreaming) onStopStreaming else onStartStreaming,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (uiState.isStreaming) {
+                        stringResource(R.string.dash_stop_stream)
+                    } else {
+                        stringResource(R.string.dash_start_stream)
+                    }
+                )
+            }
+        }
+
+        uiState.error?.let { error ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Text(
+                    text = stringResource(R.string.dash_error, error),
+                    modifier = Modifier.padding(16.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        }
+
+        if (uiState.primaryGauges.size >= 4) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ArcGauge(uiState.primaryGauges[0], Modifier.weight(1f))
+                ArcGauge(uiState.primaryGauges[1], Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ArcGauge(uiState.primaryGauges[2], Modifier.weight(1f))
+                ArcGauge(uiState.primaryGauges[3], Modifier.weight(1f))
+            }
+        } else if (uiState.definitionLoaded) {
+            Text(
+                stringResource(R.string.dash_no_primary),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (uiState.secondaryGauges.isNotEmpty()) {
+            Text(stringResource(R.string.dash_secondary_title), style = MaterialTheme.typography.titleLarge)
+            OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    uiState.secondaryGauges.forEachIndexed { index, gauge ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(gauge.channel, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                text = (formatValue(gauge.value, gauge.digits) + " " + gauge.units).trim(),
+                                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace)
+                            )
+                        }
+                        if (index < uiState.secondaryGauges.lastIndex) {
+                            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                        }
+                    }
+                }
+            }
+        }
+
+        if (uiState.parseIssueCount > 0) {
+            Text(
+                stringResource(R.string.dash_parse_issues_fmt, uiState.parseIssueCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Spacer(modifier = Modifier.padding(bottom = 8.dp))
+    }
+}
+
+@Composable
+private fun ArcGauge(gauge: GaugeDisplay, modifier: Modifier = Modifier) {
+    val trackColor = MaterialTheme.colorScheme.surfaceVariant
+    val progressColor = MaterialTheme.colorScheme.primary
+    val tickColor = MaterialTheme.colorScheme.outline
+    val value = gauge.value
+    val fraction = if (value == null || gauge.max <= gauge.min) {
+        0f
+    } else {
+        (((value - gauge.min) / (gauge.max - gauge.min)).coerceIn(0.0, 1.0)).toFloat()
+    }
+
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val strokeW = 14.dp.toPx()
+                val stroke = Stroke(width = strokeW, cap = StrokeCap.Round)
+                val pad = strokeW / 2f + 1.dp.toPx()
+                val d = min(size.width, size.height) - 2f * pad
+                val topLeft = Offset((size.width - d) / 2f, (size.height - d) / 2f)
+                val arcSize = Size(d, d)
+                drawArc(
+                    color = trackColor,
+                    startAngle = GAUGE_START_ANGLE,
+                    sweepAngle = GAUGE_SWEEP_ANGLE,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = stroke
+                )
+                if (fraction > 0f) {
+                    drawArc(
+                        color = progressColor,
+                        startAngle = GAUGE_START_ANGLE,
+                        sweepAngle = GAUGE_SWEEP_ANGLE * fraction,
+                        useCenter = false,
+                        topLeft = topLeft,
+                        size = arcSize,
+                        style = stroke
+                    )
+                }
+                val center = Offset(topLeft.x + d / 2f, topLeft.y + d / 2f)
+                val outerRadius = d / 2f
+                for (i in 0..4) {
+                    val angleRad = Math.toRadians((GAUGE_START_ANGLE + GAUGE_SWEEP_ANGLE * i / 4f).toDouble())
+                    val dir = Offset(cos(angleRad).toFloat(), sin(angleRad).toFloat())
+                    val from = center + dir * (outerRadius - 2.dp.toPx())
+                    val to = center + dir * (outerRadius - 8.dp.toPx())
+                    drawLine(tickColor, from, to, strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+                }
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = formatValue(value, gauge.digits),
+                    style = MaterialTheme.typography.headlineMedium
+                )
+                if (gauge.units.isNotBlank()) {
+                    Text(
+                        text = gauge.units,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        Text(gauge.channel, style = MaterialTheme.typography.titleMedium)
+        Text(
+            text = "${formatValue(gauge.min, 0)} – ${formatValue(gauge.max, 0)} ${gauge.units}".trim(),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private fun formatValue(value: Double?, digits: Int): String =
+    value?.let { String.format(Locale.US, "%.${digits.coerceIn(0, 3)}f", it) } ?: "--"
+
+@Preview(showBackground = true)
+@Composable
+private fun DashboardScreenPreview() {
+    ZTuneTheme {
+        DashboardContent(
+            uiState = DashboardUiState(
+                connectionStatus = EcuConnectionStatus.CONNECTED,
+                definitionLoaded = true,
+                isStreaming = true,
+                rateHz = 19.6,
+                sampleCount = 245,
+                primaryGauges = listOf(
+                    GaugeDisplay("RPM", "RPM", 0.0, 8000.0, 0, 5240.0),
+                    GaugeDisplay("AFR", "AFR", 7.0, 25.0, 1, 12.9),
+                    GaugeDisplay("TPS", "%", 0.0, 100.0, 1, 74.5),
+                    GaugeDisplay("CLT", "deg C", -40.0, 120.0, 0, 82.0)
+                ),
+                secondaryGauges = listOf(
+                    GaugeDisplay("MAP", "kPa", 0.0, 255.0, 0, 96.0),
+                    GaugeDisplay("lambda", "lambda", 0.5, 2.0, 2, 0.88),
+                    GaugeDisplay("IAT", "deg C", -40.0, 215.0, 0, 31.0),
+                    GaugeDisplay("VBatt", "V", 0.0, 25.0, 1, 13.9)
+                )
+            ),
+            onStartStreaming = {},
+            onStopStreaming = {},
+            onNavigateToConnection = {}
+        )
+    }
+}

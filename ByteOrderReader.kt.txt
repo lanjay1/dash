@@ -1,0 +1,41 @@
+package com.ztune.app.domain.memory
+
+import com.ztune.app.domain.ini.model.Endianness
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+class ByteOrderReaderTest {
+
+    @Test
+    fun `u16 little dan big endian`() {
+        val d = byteArrayOf(0x34, 0x12)
+        assertEquals(0x1234, ByteOrderReader.u16(d, 0, Endianness.LITTLE))
+        assertEquals(0x3412, ByteOrderReader.u16(d, 0, Endianness.BIG))
+    }
+
+    @Test
+    fun `s16 negatif little endian`() {
+        val d = byteArrayOf(0xFE.toByte(), 0xFF.toByte()) // 0xFFFE sebagai signed = -2
+        assertEquals(-2, ByteOrderReader.s16(d, 0, Endianness.LITTLE))
+    }
+
+    @Test
+    fun `u32 little endian`() {
+        val d = byteArrayOf(0x78, 0x56, 0x34, 0x12)
+        assertEquals(0x12345678L, ByteOrderReader.u32(d, 0, Endianness.LITTLE))
+    }
+
+    @Test
+    fun `s8 dan u8`() {
+        val d = byteArrayOf(0xFF.toByte(), 0x7F)
+        assertEquals(-1, ByteOrderReader.s8(d, 0))
+        assertEquals(255, ByteOrderReader.u8(d, 0))
+        assertEquals(127, ByteOrderReader.s8(d, 1))
+    }
+
+    @Test
+    fun `f32 little endian`() {
+        val d = byteArrayOf(0x00, 0x00, 0x60, 0x40) // 3.5f
+        assertEquals(3.5, ByteOrderReader.f32(d, 0, Endianness.LITTLE).toDouble(), 1e-9)
+    }
+}

@@ -1,0 +1,82 @@
+package com.ztune.app.domain.protocol
+
+import kotlin.math.cos
+import kotlin.math.exp
+import kotlin.math.roundToInt
+import kotlin.math.sin
+
+/**
+ * Simulator channel live data untuk mode demo: deterministik terhadap waktu.
+ * Layout blok (little-endian, 16 byte) HARUS sama dengan [OutputChannels] di
+ * BundledEcuDefinition.INI — dijaga DemoChannelSimulatorTest.
+ * AFR aktual sengaja sedikit berbeda dari target (lean saat beban tinggi)
+ * agar AutoTune menghasilkan saran realistis di demo.
+ */
+object DemoChannelSimulator {
+
+    const val BLOCK_SIZE = 16
+    const val OFFSET_RPM = 0         // U16, scale 1
+    const val OFFSET_MAP = 2         // U16, scale 1
+    const val OFFSET_CLT = 4         // S16, translate -40
+    const val OFFSET_IAT = 6         // S16, translate -40
+    const val OFFSET_TPS = 8         // U08, scale 0.5
+    const val OFFSET_AFR = 9         // U08, scale 0.1
+    const val OFFSET_LAMBDA = 10     // U08, scale 0.01
+    const val OFFSET_VBATT = 11      // U08, scale 0.1
+    const val OFFSET_AFR_TARGET = 12 // U08, scale 0.1
+
+    data class Values(
+        val rpm: Double,
+        val map: Double,
+        val clt: Double,
+        val iat: Double,
+        val tps: Double,
+        val afr: Double,
+        val lambda: Double,
+        val vbatt: Double,
+        val afrTarget: Double
+    )
+
+    fun valuesAt(timeMs: Long): Values {
+        val t = timeMs / 1000.0
+        val cycle = (t % CYCLE_SECONDS) / CYCLE_SECONDS
+        val rpm = 1300.0 + 5900.0 * (0.5 - 0.5 * cos(2.0 * Math.PI * cycle))
+        val load = (rpm - 1300.0) / 5900.0
+        val tps = 6.0 + 88.0 * load
+        val map = 35.0 + 76.0 * load
+        val clt = 24.0 + 60.0 * (1.0 - exp(-t / WARMUP_SECONDS))
+        val iat = 29.0 + 2.0 * sin(t / 9.0)
+        val afr = 14.6 - 2.0 * load
+        val afrTarget = 14.7 - 2.4 * load // idle -0.1 (rich), WOT +0.3 (lean)
+        val lambda = afr / 14.7
+        val vbatt = 13.9 + 0.2 * sin(t * 1.1)
+        return Values(rpm, map, clt, iat, tps, afr, lambda, vbatt, afrTarget)
+    }
+
+    fun block(timeMs: Long): ByteArray {
+        val v = valuesAt(timeMs)
+        val b = ByteArray(BLOCK_SIZE)
+        putU16(b, OFFSET_RPM, v.rpm.roundToInt())
+        putU16(b, OFFSET_MAP, v.map.roundToInt())
+        putS16(b, OFFSET_CLT, (v.clt + 40.0).roundToInt())
+        putS16(b, OFFSET_IAT, (v.iat + 40.0).roundToInt())
+        b[OFFSET_TPS] = (v.tps / 0.5).roundToInt().toByte()
+        b[OFFSET_AFR] = (v.afr / 0.1).roundToInt().toByte()
+        b[OFFSET_LAMBDA] = (v.lambda / 0.01).roundToInt().toByte()
+        b[OFFSET_VBATT] = (v.vbatt / 0.1).roundToInt().toByte()
+        b[OFFSET_AFR_TARGET] = (v.afrTarget / 0.1).roundToInt().toByte()
+        return b
+    }
+
+    private fun putU16(dest: ByteArray, offset: Int, value: Int) {
+        dest[offset] = (value and 0xFF).toByte()
+        dest[offset + 1] = ((value shr 8) and 0xFF).toByte()
+    }
+
+    private fun putS16(dest: ByteArray, offset: Int, value: Int) {
+        putU16(dest, offset, value.toShort().toInt() and 0xFFFF)
+    }
+
+    private const val CYCLE_SECONDS = 12.0
+    private const val WARMUP_SECONDS = 6.0
+}

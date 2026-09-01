@@ -1,0 +1,24 @@
+package com.ztune.app.domain.ini.model
+
+/**
+ * Referensi sumbu tabel: [constantName] = nama array konstanta bins di page memory,
+ * [liveChannelName] = nama channel di [OutputChannels] untuk nilai live (opsional).
+ */
+data class AxisBins(
+    val constantName: String,
+    val liveChannelName: String? = null
+)
+
+/**
+ * Entri [TableEditor]: satu tabel 2D/3D yang bisa diedit.
+ * [mapName] menunjuk ke ConstantDefinition kind ARRAY yang menjadi grid-nya.
+ */
+data class TableDefinition(
+    val tableName: String,
+    val mapName: String? = null,
+    val title: String? = null,
+    val page: Int = 1,
+    val xBins: AxisBins? = null,
+    val yBins: AxisBins? = null,
+    val sourceLine: Int = -1
+)

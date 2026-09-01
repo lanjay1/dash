@@ -1,0 +1,120 @@
+package com.ztune.app.domain.protocol
+
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeout
+
+/**
+ * Klien protokol MS-style di atas [EcuTransport]: lock-step request/response.
+ *
+ * - Satu command di wire pada satu waktu (Mutex).
+ * - Framer fresh per request.
+ * - [tolerateFramingErrors]: frame rusak/gagal CRC DI-SKIP (menunggu frame
+ *   valid hingga timeout) — dipakai polling live data agar byte basi antar
+ *   poll tidak mematikan stream. Default strict: frame rusak = error.
+ */
+class MsProtocolClient(
+    private val transport: EcuTransport,
+    private val responseTimeoutMs: Long = DEFAULT_RESPONSE_TIMEOUT_MS
+) {
+
+    private val mutex = Mutex()
+
+    suspend fun request(
+        payload: ByteArray,
+        tolerateFramingErrors: Boolean = false
+    ): MsResponseFrame = mutex.withLock {
+        val framer = MsEnvelopeFramer()
+        try {
+            withTimeout(responseTimeoutMs) {
+                coroutineScope {
+                    val events = Channel<MsEnvelopeFramer.Event>(Channel.UNLIMITED)
+                    val collector = launch {
+                        try {
+                            transport.incoming.collect { chunk ->
+                                framer.feed(chunk).forEach { events.send(it) }
+                            }
+                            events.close()
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Throwable) {
+                            events.close(EcuCommunicationException.ConnectionClosed(e))
+                        }
+                    }
+                    try {
+                        transport.write(payload)
+                        while (true) {
+                            when (val event = events.receive()) {
+                                is MsEnvelopeFramer.Event.Frame -> {
+                                    if (event.frame.flag >= 0x80) {
+                                        throw EcuCommunicationException.EcuRejected(event.frame.flag)
+                                    }
+                                    return@coroutineScope event.frame
+                                }
+                                is MsEnvelopeFramer.Event.Error -> {
+                                    if (!tolerateFramingErrors) {
+                                        throw EcuCommunicationException.InvalidFrame(event.reason)
+                                    }
+                                    // toleran: buang frame rusak, terus menunggu frame valid
+                                }
+                            }
+                        }
+                    } finally {
+                        collector.cancel()
+                    }
+                }
+            }
+        } catch (e: TimeoutCancellationException) {
+            coroutineContext.ensureActive()
+            throw EcuCommunicationException.Timeout(responseTimeoutMs)
+        } catch (e: EcuCommunicationException) {
+            throw e
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            throw EcuCommunicationException.ConnectionClosed(e)
+        }
+    }
+
+    suspend fun querySignature(commandTemplate: String = "Q"): String {
+        val response = request(MsCommands.query(commandTemplate))
+        val text = response.payload.decodeToString().trim('\u0000', ' ', '\r', '\n', '\t')
+        if (text.isEmpty()) throw EcuCommunicationException.InvalidFrame("Respons handshake kosong")
+        return text
+    }
+
+    suspend fun readPage(
+        page: Int,
+        offset: Int,
+        count: Int,
+        blockingFactor: Int = DEFAULT_BLOCKING_FACTOR
+    ): ByteArray {
+        require(count >= 0) { "count negatif: $count" }
+        require(blockingFactor in 1..0xFFFF) { "blockingFactor tidak valid: $blockingFactor" }
+        val out = ByteArray(count)
+        var pos = 0
+        while (pos < count) {
+            val chunk = minOf(blockingFactor, count - pos)
+            val response = request(MsCommands.readChunk(page, offset + pos, chunk))
+            if (response.payload.size < chunk) {
+                throw EcuCommunicationException.InvalidFrame(
+                    "Respons read pendek: minta $chunk byte, dapat ${response.payload.size}"
+                )
+            }
+            response.payload.copyInto(out, destinationOffset = pos, startIndex = 0, endIndex = chunk)
+            pos += chunk
+        }
+        return out
+    }
+
+    companion object {
+        const val DEFAULT_RESPONSE_TIMEOUT_MS = 2_000L
+        const val DEFAULT_BLOCKING_FACTOR = 1024
+    }
+}

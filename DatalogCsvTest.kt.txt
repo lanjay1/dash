@@ -1,0 +1,47 @@
+package com.ztune.app.domain.datalog
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class DatalogCsvTest {
+
+    @Test
+    fun `header dan baris sesuai urutan channel`() {
+        val csv = DatalogCsv.build(
+            listOf("RPM", "AFR"),
+            listOf(
+                DatalogSample(1000L, mapOf("RPM" to 1300.0, "AFR" to 14.6)),
+                DatalogSample(2000L, mapOf("RPM" to 1400.0))
+            )
+        )
+        val lines = csv.trimEnd().lines()
+        assertEquals("timestamp_iso,timestamp_ms,RPM,AFR", lines[0])
+        assertEquals("1970-01-01T00:00:01.000,1000,1300,14.6", lines[1])
+        assertEquals("1970-01-01T00:00:02.000,2000,1400,", lines[2]) // AFR hilang → kosong
+    }
+
+    @Test
+    fun `nilai NaN menjadi sel kosong`() {
+        val csv = DatalogCsv.build(
+            listOf("X"),
+            listOf(DatalogSample(0L, mapOf("X" to Double.NaN)))
+        )
+        assertEquals("timestamp_iso,timestamp_ms,X\n1970-01-01T00:00:00.000,0,\n", csv)
+    }
+
+    @Test
+    fun `nama channel dengan koma di-escape`() {
+        val csv = DatalogCsv.build(listOf("load, alt"), emptyList())
+        assertTrue(csv.startsWith("timestamp_iso,timestamp_ms,\"load, alt\""))
+    }
+
+    @Test
+    fun `angka pecahan tanpa nol tak berarti`() {
+        val csv = DatalogCsv.build(
+            listOf("V"),
+            listOf(DatalogSample(0L, mapOf("V" to 13.90000)))
+        )
+        assertTrue(csv.contains("13.9"))
+    }
+}

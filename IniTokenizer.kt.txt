@@ -1,0 +1,105 @@
+package com.ztune.app.domain.ini
+
+/**
+ * Tokenizer level-baris untuk INI gaya TunerStudio/MegaSquirt.
+ * Sadar string ber-kutip (komentar/koma di dalam kutip tidak dihitung)
+ * dan blok ekspresi { ... } (koma di dalamnya tidak memecah field).
+ * Pure Kotlin, tanpa dependensi Android.
+ */
+data class IniLine(
+    val lineNumber: Int,
+    val raw: String,
+    val sectionName: String? = null,
+    val key: String? = null,
+    val value: String? = null
+)
+
+object IniTokenizer {
+
+    /** Tokenisasi seluruh teks. Baris kosong/komentar dibuang; baris rusak tetap ada (semua field null). */
+    fun tokenize(text: String): List<IniLine> {
+        val result = mutableListOf<IniLine>()
+        text.lineSequence().forEachIndexed { index, rawLine ->
+            val lineNumber = index + 1
+            val stripped = stripComment(rawLine).trim()
+            if (stripped.isEmpty()) return@forEachIndexed
+
+            if (stripped.startsWith("[")) {
+                val close = stripped.indexOf(']')
+                result += if (close > 1) {
+                    IniLine(lineNumber, rawLine, sectionName = stripped.substring(1, close).trim())
+                } else {
+                    IniLine(lineNumber, rawLine) // header rusak → parser menandai issue
+                }
+                return@forEachIndexed
+            }
+
+            val kv = splitKeyValue(stripped)
+            result += if (kv != null) {
+                IniLine(lineNumber, rawLine, key = kv.first, value = kv.second)
+            } else {
+                IniLine(lineNumber, rawLine) // bukan section, bukan key=value → malformed
+            }
+        }
+        return result
+    }
+
+    /** Buang komentar (';' atau '#') di luar string ber-kutip. */
+    fun stripComment(line: String): String {
+        var inQuote = false
+        line.forEachIndexed { i, c ->
+            when {
+                c == '"' -> inQuote = !inQuote
+                (c == ';' || c == '#') && !inQuote -> return line.substring(0, i)
+            }
+        }
+        return line
+    }
+
+    /** Pecah pada '=' pertama di luar kutip. Null jika tidak ada '=' atau key kosong. */
+    fun splitKeyValue(line: String): Pair<String, String>? {
+        var inQuote = false
+        line.forEachIndexed { i, c ->
+            when {
+                c == '"' -> inQuote = !inQuote
+                c == '=' && !inQuote -> {
+                    val key = line.substring(0, i).trim()
+                    val value = line.substring(i + 1).trim()
+                    if (key.isEmpty()) return null
+                    return key to value
+                }
+            }
+        }
+        return null
+    }
+
+    /**
+     * Pecah value menjadi fields pada koma di luar kutip DAN di luar { ... }
+     * (ekspresi/default array boleh berisi koma, mis. "rpmBins = { 800, 1600, ... }").
+     */
+    fun splitFields(value: String): List<String> {
+        if (value.isEmpty()) return emptyList()
+        val fields = mutableListOf<String>()
+        val sb = StringBuilder()
+        var inQuote = false
+        var braceDepth = 0
+        value.forEach { c ->
+            when {
+                c == '"' -> { inQuote = !inQuote; sb.append(c) }
+                c == '{' && !inQuote -> { braceDepth++; sb.append(c) }
+                c == '}' && !inQuote -> { braceDepth = (braceDepth - 1).coerceAtLeast(0); sb.append(c) }
+                c == ',' && !inQuote && braceDepth == 0 -> { fields += sb.toString().trim(); sb.clear() }
+                else -> sb.append(c)
+            }
+        }
+        val last = sb.toString().trim()
+        if (last.isNotEmpty() || fields.isEmpty()) fields += last
+        return fields
+    }
+
+    /** Lepas kutip pembuka/penutup jika ada. */
+    fun unquote(s: String): String {
+        val t = s.trim()
+        return if (t.length >= 2 && t.first() == '"' && t.last() == '"') t.substring(1, t.length - 1) else t
+    }
+}

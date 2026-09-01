@@ -1,0 +1,157 @@
+package com.ztune.app.presentation.home
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewModelScope
+import com.ztune.app.R
+import com.ztune.app.core.theme.ZTuneTheme
+import com.ztune.app.data.transport.EcuConnectionManager
+import com.ztune.app.data.transport.EcuConnectionStatus
+import com.ztune.app.presentation.components.PlaceholderCard
+import dagger.hilt.android.lifecycle.HiltViewModel
+import javax.inject.Inject
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+
+data class HomeUiState(
+    val ecuConnected: Boolean = false,
+    val ecuName: String? = null,
+    val signature: String? = null
+)
+
+@HiltViewModel
+class HomeViewModel @Inject constructor(
+    connectionManager: EcuConnectionManager
+) : ViewModel() {
+    val uiState: StateFlow<HomeUiState> = connectionManager.state
+        .map { s ->
+            HomeUiState(
+                ecuConnected = s.status == EcuConnectionStatus.CONNECTED,
+                ecuName = s.transportName,
+                signature = s.signature
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), HomeUiState())
+}
+
+@Composable
+fun HomeScreen(
+    onNavigateToDashboard: () -> Unit,
+    onNavigateToTuneEditor: () -> Unit,
+    onNavigateToConnection: () -> Unit,
+    viewModel: HomeViewModel = hiltViewModel(),
+    modifier: Modifier = Modifier
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    HomeContent(
+        uiState = uiState,
+        onNavigateToDashboard = onNavigateToDashboard,
+        onNavigateToTuneEditor = onNavigateToTuneEditor,
+        onNavigateToConnection = onNavigateToConnection,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun HomeContent(
+    uiState: HomeUiState,
+    onNavigateToDashboard: () -> Unit,
+    onNavigateToTuneEditor: () -> Unit,
+    onNavigateToConnection: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(stringResource(R.string.app_name), style = MaterialTheme.typography.headlineMedium)
+        Text(
+            text = stringResource(R.string.home_subtitle),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(stringResource(R.string.home_connection_title), style = MaterialTheme.typography.titleLarge)
+                Text(
+                    text = if (uiState.ecuConnected) {
+                        stringResource(R.string.home_connected, uiState.ecuName ?: "ECU")
+                    } else {
+                        stringResource(R.string.home_not_connected)
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (uiState.ecuConnected) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                uiState.signature?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Button(onClick = onNavigateToConnection, modifier = Modifier.fillMaxWidth()) {
+            Text(stringResource(R.string.home_action_connect))
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Button(onClick = onNavigateToDashboard, modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.home_action_dashboard))
+            }
+            OutlinedButton(onClick = onNavigateToTuneEditor, modifier = Modifier.weight(1f)) {
+                Text(stringResource(R.string.home_action_tune))
+            }
+        }
+
+        PlaceholderCard(stringResource(R.string.module_ini_title), stringResource(R.string.module_ini_desc), "Fase 1")
+        PlaceholderCard(stringResource(R.string.module_comm_title), stringResource(R.string.module_comm_desc), "Fase 2")
+        PlaceholderCard(stringResource(R.string.module_memory_title), stringResource(R.string.module_memory_desc), "Fase 3")
+        PlaceholderCard(stringResource(R.string.module_tunefile_title), stringResource(R.string.module_tunefile_desc), "Fase 4")
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun HomeScreenPreview() {
+    ZTuneTheme {
+        HomeContent(
+            uiState = HomeUiState(),
+            onNavigateToDashboard = {},
+            onNavigateToTuneEditor = {},
+            onNavigateToConnection = {}
+        )
+    }
+}

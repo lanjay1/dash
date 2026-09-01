@@ -1,0 +1,8 @@
+package com.ztune.app.domain.ini.model
+
+/** Satu page memory ECU. [size] null jika INI tidak mendeklarasikan pageSize. */
+data class PageDefinition(
+    val index: Int,
+    val size: Int? = null,
+    val sourceLine: Int = -1
+)

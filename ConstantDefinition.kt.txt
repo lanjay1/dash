@@ -1,0 +1,76 @@
+package com.ztune.app.domain.ini.model
+
+/** Jenis definisi konstanta sesuai grammar INI TunerStudio/MegaSquirt. */
+enum class ConstantKind { SCALAR, ARRAY, BITS, STRING }
+
+/**
+ * Tipe data field. [byteSize] dipakai untuk layout memory (FASE 3).
+ */
+enum class FieldType(val id: String, val byteSize: Int) {
+    S08("S08", 1), U08("U08", 1),
+    S16("S16", 2), U16("U16", 2),
+    S32("S32", 4), U32("U32", 4),
+    S64("S64", 8), U64("U64", 8),
+    F32("F32", 4), F64("F64", 8),
+    BITS("bits", 1),
+    STRING("string", 1),
+    UNKNOWN("unknown", 0);
+
+    companion object {
+        private val byId = entries.associateBy { it.id.lowercase() }
+        private val aliases = mapOf("bit" to BITS, "ascii" to STRING)
+
+        /** Null jika id tidak dikenal → pemanggil wajib fail-closed. */
+        fun fromId(raw: String): FieldType? {
+            val id = raw.trim().lowercase()
+            return byId[id] ?: aliases[id]
+        }
+    }
+}
+
+/** Bentuk array sesuai tulisan di INI: [RxC] → rows=R, cols=C; [N] → rows=1, cols=N. */
+data class ArrayShape(val rows: Int, val cols: Int) {
+    val elementCount: Int get() = rows * cols
+}
+
+/** Rentang bit untuk kind BITS, mis. [0:2] → lowBit=0, highBitInclusive=2. */
+data class BitRange(val lowBit: Int, val highBitInclusive: Int) {
+    val bitCount: Int get() = highBitInclusive - lowBit + 1
+    val byteSize: Int get() = highBitInclusive / 8 + 1
+}
+
+/** Penanda bahwa konstanta tidak terikat page memory (mis. channel di [OutputChannels]). */
+const val PAGE_NOT_MAPPED = -1
+
+/**
+ * Satu konstanta/parameter di page memory ECU.
+ * scale/translate/min/max bernilai [Double.NaN] jika field di INI berupa ekspresi
+ * yang belum dievaluasi (issue tercatat di hasil parse).
+ */
+data class ConstantDefinition(
+    val name: String,
+    val kind: ConstantKind,
+    val type: FieldType,
+    val page: Int,
+    val offset: Int,
+    val shape: ArrayShape? = null,
+    val units: String = "",
+    val scale: Double = 1.0,
+    val translate: Double = 0.0,
+    val min: Double = 0.0,
+    val max: Double = 0.0,
+    val digits: Int = 0,
+    val bitRange: BitRange? = null,
+    val labels: List<String> = emptyList(),
+    val stringLength: Int? = null,
+    val sourceLine: Int = -1
+) {
+    val elementCount: Int get() = shape?.elementCount ?: 1
+
+    /** Total byte yang ditempati konstanta ini di page memory. */
+    fun byteSize(): Int = when (kind) {
+        ConstantKind.STRING -> stringLength ?: 0
+        ConstantKind.BITS -> bitRange?.byteSize ?: type.byteSize
+        else -> type.byteSize * elementCount
+    }
+}

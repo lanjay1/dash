@@ -1,0 +1,453 @@
+package com.ztune.app.presentation.tune
+
+import android.content.Context
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.ztune.app.R
+import com.ztune.app.data.definition.EcuDefinitionRepository
+import com.ztune.app.data.repository.DatalogRepository
+import com.ztune.app.data.transport.EcuConnectionManager
+import com.ztune.app.data.transport.EcuConnectionStatus
+import com.ztune.app.data.writer.EcuWriter
+import com.ztune.app.domain.autotune.AutoTuneConfig
+import com.ztune.app.domain.autotune.VeAutoTune
+import com.ztune.app.domain.ini.model.Endianness
+import com.ztune.app.domain.memory.ConstantDecoder
+import com.ztune.app.domain.memory.EcuMemoryReader
+import com.ztune.app.domain.table.CellEdit
+import com.ztune.app.domain.table.CellPos
+import com.ztune.app.domain.table.EditBatch
+import com.ztune.app.domain.table.TableEditHistory
+import com.ztune.app.domain.table.TableGrid
+import com.ztune.app.domain.table.TableInterpolator
+import com.ztune.app.presentation.datalog.SessionUi
+import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import java.util.Locale
+import javax.inject.Inject
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+data class TableEntryUi(val name: String, val title: String)
+
+data class GridSnapshot(
+    val rows: Int,
+    val cols: Int,
+    val cells: List<List<Double?>>,
+    val xBins: List<Double>,
+    val yBins: List<Double>,
+    val digits: Int,
+    val units: String,
+    val heatMin: Double,
+    val heatMax: Double
+)
+
+data class PendingWriteUi(
+    val tableTitle: String,
+    val page: Int,
+    val offset: Int,
+    val byteCount: Int
+)
+
+data class AutoTuneCellUi(
+    val row: Int,
+    val col: Int,
+    val xLabel: String,
+    val yLabel: String,
+    val currentValue: Double,
+    val suggestedValue: Double,
+    val correctionPct: Double,
+    val meanAfrError: Double,
+    val sampleCount: Int
+)
+
+data class AutoTuneSuggestionUi(
+    val usedSamples: Int,
+    val skippedSamples: Int,
+    val cells: List<AutoTuneCellUi>
+)
+
+data class TuneEditorUiState(
+    val connectionStatus: EcuConnectionStatus = EcuConnectionStatus.DISCONNECTED,
+    val tables: List<TableEntryUi> = emptyList(),
+    val selectedIndex: Int = -1,
+    val grid: GridSnapshot? = null,
+    val zoom: Float = 1f,
+    val selectMode: Boolean = false,
+    val selected: Set<CellPos> = emptySet(),
+    val canUndo: Boolean = false,
+    val canRedo: Boolean = false,
+    val dirty: Boolean = false,
+    val isLoading: Boolean = false,
+    val isWriting: Boolean = false,
+    val pageLoaded: Boolean = false,
+    val message: String? = null,
+    val pendingWrite: PendingWriteUi? = null,
+    val logSessions: List<SessionUi> = emptyList(),
+    val showSessionPicker: Boolean = false,
+    val isAnalyzing: Boolean = false,
+    val autoTune: AutoTuneSuggestionUi? = null
+)
+
+@HiltViewModel
+class TuneEditorViewModel @Inject constructor(
+    private val connectionManager: EcuConnectionManager,
+    private val definitionRepository: EcuDefinitionRepository,
+    private val datalogRepository: DatalogRepository,
+    @ApplicationContext private val appContext: Context
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(TuneEditorUiState())
+    val uiState: StateFlow<TuneEditorUiState> = _uiState.asStateFlow()
+
+    private var grids: MutableMap<String, TableGrid> = mutableMapOf()
+    private var workingPages: MutableMap<Int, ByteArray> = mutableMapOf()
+    private var originalPages: MutableMap<Int, ByteArray> = mutableMapOf()
+    private val history = TableEditHistory()
+
+    init {
+        definitionRepository.ensureBundledLoaded()
+        val def = definitionRepository.definition.value
+        val tables = def?.tables?.values?.map { TableEntryUi(it.tableName, it.title ?: it.tableName) } ?: emptyList()
+        _uiState.update { it.copy(tables = tables) }
+
+        viewModelScope.launch {
+            connectionManager.state.collect { s ->
+                _uiState.update { it.copy(connectionStatus = s.status) }
+                if (s.status != EcuConnectionStatus.CONNECTED) {
+                    _uiState.update { it.copy(pageLoaded = false, grid = null) }
+                }
+            }
+        }
+    }
+
+    fun selectTable(index: Int) {
+        _uiState.update { it.copy(selectedIndex = index, selected = emptySet(), autoTune = null) }
+        loadPageIfNeeded()
+    }
+
+    fun loadPageIfNeeded() {
+        val def = definitionRepository.definition.value ?: return
+        val table = def.tables.values.getOrNull(_uiState.value.selectedIndex) ?: return
+        val page = table.page
+        if (workingPages.containsKey(page)) {
+            rebuildGrid(table.tableName)
+            return
+        }
+        if (!connectionManager.isConnected) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            try {
+                val buffer = connectionManager.withClient { client ->
+                    EcuMemoryReader(client, def).readPage(page)
+                }
+                workingPages[page] = buffer.data.copyOf()
+                originalPages[page] = buffer.data.copyOf()
+                _uiState.update { it.copy(pageLoaded = true, isLoading = false, message = null, autoTune = null) }
+                rebuildGrid(table.tableName)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isLoading = false, message = "Gagal muat page: ${e.message}") }
+            }
+        }
+    }
+
+    fun zoomIn() = _uiState.update { it.copy(zoom = (it.zoom + 0.25f).coerceAtMost(2.5f)) }
+    fun zoomOut() = _uiState.update { it.copy(zoom = (it.zoom - 0.25f).coerceAtLeast(0.6f)) }
+
+    fun toggleSelectMode() =
+        _uiState.update { it.copy(selectMode = !it.selectMode, selected = if (it.selectMode) emptySet() else it.selected) }
+
+    fun clearSelection() = _uiState.update { it.copy(selected = emptySet()) }
+
+    fun toggleCell(row: Int, col: Int) {
+        val pos = CellPos(row, col)
+        _uiState.update {
+            it.copy(selected = if (pos in it.selected) it.selected - pos else it.selected + pos)
+        }
+    }
+
+    fun editCell(row: Int, col: Int, value: Double) = applyBatch(
+        EditBatch("Edit [$row,$col]", listOf(CellEdit(row, col, value, value)))
+    )
+
+    fun interpolateRowWise() {
+        val grid = currentGrid() ?: return
+        val batch = TableInterpolator.rowWise(grid, _uiState.value.selected) ?: run {
+            message("Pilih minimal 2 sel dalam satu baris"); return
+        }
+        applyBatch(batch)
+    }
+
+    fun interpolateColumnWise() {
+        val grid = currentGrid() ?: return
+        val batch = TableInterpolator.columnWise(grid, _uiState.value.selected) ?: run {
+            message("Pilih minimal 2 sel dalam satu kolom"); return
+        }
+        applyBatch(batch)
+    }
+
+    fun undo() {
+        val grid = currentGrid() ?: return
+        history.undo(grid)
+        refreshAfterMutation()
+    }
+
+    fun redo() {
+        val grid = currentGrid() ?: return
+        history.redo(grid)
+        refreshAfterMutation()
+    }
+
+    // ---------- AutoTune ----------
+
+    fun openSessionPicker() {
+        viewModelScope.launch {
+            try {
+                val rows = datalogRepository.sessions().first()
+                _uiState.update {
+                    it.copy(
+                        showSessionPicker = true,
+                        logSessions = rows.map { r -> SessionUi(r.id, r.name, r.createdAtMs, r.sampleCount) }
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                message("Gagal memuat daftar sesi: ${e.message}")
+            }
+        }
+    }
+
+    fun dismissSessionPicker() = _uiState.update { it.copy(showSessionPicker = false) }
+
+    fun analyzeSession(sessionId: Long) {
+        val def = definitionRepository.definition.value ?: run {
+            message(appContext.getString(R.string.dl_err_no_definition)); return
+        }
+        val grid = currentGrid() ?: run {
+            message(appContext.getString(R.string.tune_autotune_no_grid)); return
+        }
+        dismissSessionPicker()
+        viewModelScope.launch {
+            _uiState.update { it.copy(isAnalyzing = true, autoTune = null, message = null) }
+            try {
+                val meta = datalogRepository.sessionMeta(sessionId)
+                if (meta == null) {
+                    message("Sesi tidak ditemukan"); return@launch
+                }
+                val afrChannel = resolveChannel(def.outputChannels.keys, "AFR")
+                val afrTargetChannel = resolveChannel(def.outputChannels.keys, "AFRTarget")
+                val xChannel = grid.table.xBins?.liveChannelName
+                val yChannel = grid.table.yBins?.liveChannelName
+                if (afrChannel == null || afrTargetChannel == null) {
+                    message(appContext.getString(R.string.tune_autotune_no_channels)); return@launch
+                }
+                if (xChannel == null || yChannel == null) {
+                    message(appContext.getString(R.string.tune_autotune_no_axis)); return@launch
+                }
+                val required = listOf(afrChannel, afrTargetChannel, xChannel, yChannel).distinct()
+                val missing = required.filter { it !in meta.channels }
+                if (missing.isNotEmpty()) {
+                    message(
+                        appContext.getString(
+                            R.string.tune_autotune_missing_channels_fmt, missing.joinToString(", ")
+                        )
+                    )
+                    return@launch
+                }
+                val samples = datalogRepository.samples(sessionId)
+                val xBins = decodeBins(grid, grid.table.xBins?.constantName)
+                val yBins = decodeBins(grid, grid.table.yBins?.constantName)
+                val gridValues = (0 until grid.rows).map { r -> (0 until grid.cols).map { c -> grid.physical(r, c) } }
+                val result = withContext(Dispatchers.Default) {
+                    VeAutoTune.analyze(
+                        samples = samples,
+                        afrChannel = afrChannel,
+                        afrTargetChannel = afrTargetChannel,
+                        xAxisChannel = xChannel,
+                        yAxisChannel = yChannel,
+                        xBins = xBins,
+                        yBins = yBins,
+                        gridValues = gridValues,
+                        config = AutoTuneConfig()
+                    )
+                }
+                val cellUis = result.cells.map { cell ->
+                    AutoTuneCellUi(
+                        row = cell.row,
+                        col = cell.col,
+                        xLabel = formatAxisLabel(xBins.getOrNull(cell.col)),
+                        yLabel = formatAxisLabel(yBins.getOrNull(cell.row)),
+                        currentValue = cell.currentValue,
+                        suggestedValue = cell.suggestedValue,
+                        correctionPct = cell.correctionPct,
+                        meanAfrError = cell.meanAfrError,
+                        sampleCount = cell.sampleCount
+                    )
+                }
+                _uiState.update {
+                    it.copy(
+                        isAnalyzing = false,
+                        autoTune = AutoTuneSuggestionUi(result.usedSamples, result.skippedSamples, cellUis)
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isAnalyzing = false, message = "AutoTune gagal: ${e.message}") }
+            }
+        }
+    }
+
+    /** Approval #1: saran menjadi satu EditBatch (masih bisa di-undo). Write tetap butuh approval #2. */
+    fun applyAutoTune() {
+        val suggestion = _uiState.value.autoTune ?: return
+        val batch = EditBatch(
+            label = "AutoTune (${suggestion.cells.size} sel)",
+            edits = suggestion.cells.map { CellEdit(it.row, it.col, it.currentValue, it.suggestedValue) }
+        )
+        applyBatch(batch)
+        _uiState.update {
+            it.copy(
+                autoTune = null,
+                message = appContext.getString(R.string.tune_autotune_applied_fmt, suggestion.cells.size)
+            )
+        }
+    }
+
+    fun dismissAutoTune() = _uiState.update { it.copy(autoTune = null) }
+
+    private fun resolveChannel(names: Collection<String>, wanted: String): String? =
+        names.firstOrNull { it.equals(wanted, ignoreCase = true) }
+
+    private fun decodeBins(grid: TableGrid, constantName: String?): List<Double> {
+        if (constantName == null) return emptyList()
+        val def = definitionRepository.definition.value ?: return emptyList()
+        val constant = def.constants[constantName] ?: return emptyList()
+        val data = workingPages[grid.table.page] ?: return emptyList()
+        return ConstantDecoder.decodeArray(constant, data, 0, def.meta.endianness ?: Endianness.LITTLE)
+            ?: (0 until constant.elementCount).map { it.toDouble() }
+    }
+
+    private fun formatAxisLabel(v: Double?): String =
+        v?.let { String.format(Locale.US, "%.0f", it) } ?: "--"
+
+    // ---------- Write ----------
+
+    fun requestWrite() {
+        val def = definitionRepository.definition.value ?: return
+        val table = def.tables.values.getOrNull(_uiState.value.selectedIndex) ?: return
+        val grid = currentGrid() ?: return
+        _uiState.update {
+            it.copy(
+                pendingWrite = PendingWriteUi(
+                    tableTitle = table.title ?: table.tableName,
+                    page = table.page,
+                    offset = grid.map.offset,
+                    byteCount = grid.byteSize
+                )
+            )
+        }
+    }
+
+    fun dismissWrite() = _uiState.update { it.copy(pendingWrite = null) }
+
+    fun confirmWrite() {
+        val pending = _uiState.value.pendingWrite ?: return
+        val def = definitionRepository.definition.value ?: return
+        val table = def.tables.values.getOrNull(_uiState.value.selectedIndex) ?: return
+        val grid = currentGrid() ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isWriting = true, pendingWrite = null) }
+            try {
+                connectionManager.withClient { client ->
+                    EcuWriter(client, def).writeRegion(
+                        page = table.page,
+                        offset = grid.map.offset,
+                        data = grid.regionBytes()
+                    )
+                }
+                originalPages[table.page] = workingPages[table.page]!!.copyOf()
+                history.markSaved()
+                _uiState.update {
+                    it.copy(isWriting = false, message = "Tulis ke ECU sukses & terverifikasi", autoTune = null)
+                }
+                refreshAfterMutation()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(isWriting = false, message = "Write GAGAL: ${e.message}") }
+            }
+        }
+    }
+
+    fun clearMessage() = _uiState.update { it.copy(message = null) }
+
+    // ---------- Internal ----------
+
+    private fun applyBatch(batch: EditBatch) {
+        val grid = currentGrid() ?: return
+        history.apply(grid, batch)
+        refreshAfterMutation()
+    }
+
+    private fun currentGrid(): TableGrid? {
+        val def = definitionRepository.definition.value ?: return null
+        val table = def.tables.values.getOrNull(_uiState.value.selectedIndex) ?: return null
+        return grids[table.tableName]
+    }
+
+    private fun rebuildGrid(tableName: String) {
+        val def = definitionRepository.definition.value ?: return
+        val table = def.tables[tableName] ?: return
+        val map = def.constants[table.mapName] ?: run {
+            message("Map '${table.mapName}' tidak ditemukan di definisi")
+            return
+        }
+        val page = table.page
+        val working = workingPages[page] ?: return
+        val grid = TableGrid(table, map, working, def.meta.endianness ?: Endianness.LITTLE)
+        grids[tableName] = grid
+        refreshAfterMutation()
+    }
+
+    private fun refreshAfterMutation() {
+        val grid = currentGrid() ?: return
+        val def = definitionRepository.definition.value ?: return
+        val values = (0 until grid.rows).map { r -> (0 until grid.cols).map { c -> grid.physical(r, c) } }
+        val xBins = decodeBins(grid, grid.table.xBins?.constantName)
+        val yBins = decodeBins(grid, grid.table.yBins?.constantName)
+        val heatMin = if (!grid.map.min.isNaN() && grid.map.max > grid.map.min) grid.map.min else 0.0
+        val heatMax = if (!grid.map.max.isNaN() && grid.map.max > grid.map.min) grid.map.max else 100.0
+        _uiState.update {
+            it.copy(
+                grid = GridSnapshot(
+                    rows = grid.rows,
+                    cols = grid.cols,
+                    cells = values,
+                    xBins = xBins,
+                    yBins = yBins,
+                    digits = grid.map.digits,
+                    units = grid.map.units,
+                    heatMin = heatMin,
+                    heatMax = heatMax
+                ),
+                canUndo = history.canUndo,
+                canRedo = history.canRedo,
+                dirty = history.isDirty,
+                selected = it.selected.filter { p -> p.row < grid.rows && p.col < grid.cols }.toSet()
+            )
+        }
+    }
+
+    private fun message(text: String) = _uiState.update { it.copy(message = text) }
+}

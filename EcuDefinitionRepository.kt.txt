@@ -1,0 +1,41 @@
+package com.ztune.app.data.definition
+
+import com.ztune.app.domain.ini.BundledEcuDefinition
+import com.ztune.app.domain.ini.IniDefinitionParser
+import com.ztune.app.domain.ini.model.EcuDefinition
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/**
+ * Pemilik definisi ECU aktif aplikasi-wide. FASE 3: definisi bawaan (bundled).
+ * FASE 4: load() dipanggil dari file picker/impor rusefi.ini — konsumen lain
+ * (dashboard, memory model) otomatis mengikuti lewat StateFlow.
+ */
+@Singleton
+class EcuDefinitionRepository @Inject constructor() {
+
+    private val parser = IniDefinitionParser()
+
+    private val _definition = MutableStateFlow<EcuDefinition?>(null)
+    val definition: StateFlow<EcuDefinition?> = _definition.asStateFlow()
+
+    val isLoaded: Boolean get() = _definition.value != null
+
+    /** Muat definisi bawaan bila belum ada yang dimuat (idempotent). */
+    fun ensureBundledLoaded(): EcuDefinition {
+        _definition.value?.let { return it }
+        val parsed = parser.parse(BundledEcuDefinition.INI)
+        _definition.value = parsed
+        return parsed
+    }
+
+    /** Muat definisi dari teks .ini (impor pengguna — FASE 4). */
+    fun load(text: String): EcuDefinition {
+        val parsed = parser.parse(text)
+        _definition.value = parsed
+        return parsed
+    }
+}

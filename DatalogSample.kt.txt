@@ -1,0 +1,7 @@
+package com.ztune.app.domain.datalog
+
+/** Satu titik sampel log: waktu (epoch ms) + nilai channel yang direkam. */
+data class DatalogSample(
+    val timestampMs: Long,
+    val values: Map<String, Double>
+)

@@ -1,0 +1,56 @@
+package com.ztune.app.domain.ini
+
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Test
+
+class IniTokenizerTest {
+
+    @Test
+    fun `stripComment memotong di luar kutip saja`() {
+        assertEquals(
+            "signature = \"ZTUNE;TEST\"",
+            IniTokenizer.stripComment("signature = \"ZTUNE;TEST\" ; komentar").trim()
+        )
+        assertEquals("a = 1", IniTokenizer.stripComment("a = 1 ; x").trim())
+        assertEquals("a = 1", IniTokenizer.stripComment("a = 1 # x").trim())
+        assertEquals("", IniTokenizer.stripComment("   ; hanya komentar").trim())
+    }
+
+    @Test
+    fun `splitKeyValue memecah pada sama dengan pertama`() {
+        val kv = IniTokenizer.splitKeyValue("veTable1Map = array, U08, 52, [16x16]")
+        assertEquals("veTable1Map", kv?.first)
+        assertEquals("array, U08, 52, [16x16]", kv?.second)
+        assertNull(IniTokenizer.splitKeyValue("tanpa sama dengan"))
+    }
+
+    @Test
+    fun `splitFields menghormati kutip dan kurung kurawal`() {
+        val f = IniTokenizer.splitFields("array, U08, 52, [16x16], \"%\", 0.5")
+        assertEquals(listOf("array", "U08", "52", "[16x16]", "\"%\"", "0.5"), f)
+
+        // koma di dalam { } tidak memecah
+        val g = IniTokenizer.splitFields("{ 1, 2, 3 }")
+        assertEquals(listOf("{ 1, 2, 3 }"), g)
+    }
+
+    @Test
+    fun `unquote melepas kutip pembuka penutup`() {
+        assertEquals("VE Table 1", IniTokenizer.unquote("\"VE Table 1\""))
+        assertEquals("plain", IniTokenizer.unquote("plain"))
+        assertEquals("", IniTokenizer.unquote("\"\""))
+    }
+
+    @Test
+    fun `tokenize menghasilkan section dan key-value dengan nomor baris`() {
+        val lines = IniTokenizer.tokenize("[A]\r\nk = 1\r\n; komentar\r\n\n[B]\nx = 2")
+        assertEquals(4, lines.size)
+        assertEquals(listOf(1, 2, 5, 6), lines.map { it.lineNumber })
+        assertEquals("A", lines[0].sectionName)
+        assertEquals("k", lines[1].key)
+        assertEquals("1", lines[1].value)
+        assertEquals("B", lines[2].sectionName)
+        assertNull(lines[0].key)
+    }
+}

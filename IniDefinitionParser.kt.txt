@@ -1,0 +1,329 @@
+package com.ztune.app.domain.ini
+
+import com.ztune.app.domain.ini.model.Endianness
+import com.ztune.app.domain.ini.model.EcuCommands
+import com.ztune.app.domain.ini.model.EcuDefinition
+import com.ztune.app.domain.ini.model.EcuMeta
+import com.ztune.app.domain.ini.model.ExtraEntry
+import com.ztune.app.domain.ini.model.IniParseIssue
+import com.ztune.app.domain.ini.model.PAGE_NOT_MAPPED
+import com.ztune.app.domain.ini.model.PageDefinition
+import com.ztune.app.domain.ini.model.TableDefinition
+import com.ztune.app.domain.ini.model.AxisBins
+
+/**
+ * Parser utama: token baris → [EcuDefinition] terstruktur.
+ *
+ * Strategi toleran: baris rusak dicatat sebagai issue lalu parsing berlanjut —
+ * INI rusEFI asli berpuluh ribu baris dan satu baris jelek tidak boleh
+ * menggagalkan seluruh definisi. Fail-closed hanya untuk field layout memory.
+ *
+ * Command keys (pageReadCommand, burnCommand, dll.) di-scan dari section mana pun
+ * karena penempatannya berbeda antar firmware; value disimpan mentah untuk
+ * diinterpretasikan ProtocolProfile di FASE 2/3.
+ */
+class IniDefinitionParser {
+
+    fun parse(text: String): EcuDefinition {
+        val lines = IniTokenizer.tokenize(text)
+        val issues = mutableListOf<IniParseIssue>()
+
+        var section = ""
+
+        // State [Constants]
+        var currentPage = 1
+        val pages = LinkedHashMap<Int, PageDefinition>()
+        val constants = LinkedHashMap<String, ConstantDefinition>()
+        val extraEntries = mutableListOf<ExtraEntry>()
+
+        // State [TableEditor]
+        var currentTable: TableDefinition? = null
+        val tables = LinkedHashMap<String, TableDefinition>()
+
+        // [OutputChannels]
+        val outputChannels = LinkedHashMap<String, ConstantDefinition>()
+
+        // Meta & commands — kemunculan pertama menang
+        var signature: String? = null
+        var endianness: Endianness? = null
+        var queryCommand: String? = null
+        var versionInfo: String? = null
+        var pageReadCommand: String? = null
+        var pageChunkWrite: String? = null
+        var burnCommand: String? = null
+        var crc32CheckCommand: String? = null
+        var pageActivationCommand: String? = null
+        var ochGetCommand: String? = null
+        var ochBlockSize: Int? = null
+        var blockingFactor: Int? = null
+
+        fun ensurePage(index: Int) {
+            pages.getOrPut(index) { PageDefinition(index = index) }
+        }
+
+        for (line in lines) {
+
+            // ---------- 1) Header section ----------
+            val sectionName = line.sectionName
+            if (sectionName != null) {
+                commitTable(currentTable, tables, issues)
+                currentTable = null
+                section = sectionName.lowercase()
+                if (section == "constants") currentPage = 1
+                continue
+            }
+
+            val key = line.key
+            val value = line.value
+            if (key == null) {
+                issues += IniParseIssue(
+                    line.lineNumber, line.raw,
+                    "Baris tidak bisa diparse (bukan [Section] atau key=value)"
+                )
+                continue
+            }
+
+            // ---------- 2) Scan meta & commands (berlaku di section mana pun) ----------
+            when (key.lowercase()) {
+                "signature" -> signature = signature ?: IniTokenizer.unquote(value ?: "")
+                "endianness" -> if (endianness == null) {
+                    endianness = when ((value ?: "").trim().lowercase()) {
+                        "little" -> Endianness.LITTLE
+                        "big" -> Endianness.BIG
+                        else -> {
+                            issues += IniParseIssue(line.lineNumber, line.raw, "endianness tidak dikenal: '$value'")
+                            null
+                        }
+                    }
+                }
+                "querycommand" -> queryCommand = queryCommand ?: IniTokenizer.unquote(value ?: "")
+                "versioninfo" -> versionInfo = versionInfo ?: IniTokenizer.unquote(value ?: "")
+                "pagereadcommand" -> pageReadCommand = pageReadCommand ?: IniTokenizer.unquote(value ?: "")
+                "pagechunkwrite" -> pageChunkWrite = pageChunkWrite ?: IniTokenizer.unquote(value ?: "")
+                "burncommand" -> burnCommand = burnCommand ?: IniTokenizer.unquote(value ?: "")
+                "crc32checkcommand" -> crc32CheckCommand = crc32CheckCommand ?: IniTokenizer.unquote(value ?: "")
+                "pageactivationcommand" -> pageActivationCommand = pageActivationCommand ?: IniTokenizer.unquote(value ?: "")
+                "ochgetcommand" -> ochGetCommand = ochGetCommand ?: IniTokenizer.unquote(value ?: "")
+                "ochblocksize" -> ochBlockSize = ochBlockSize ?: IniFieldParser.parseInt(value ?: "")
+                "blockingfactor" -> blockingFactor = blockingFactor ?: IniFieldParser.parseInt(value ?: "")
+            }
+
+            // ---------- 3) Penanganan per-section ----------
+            when (section) {
+
+                "constants" -> when (key.lowercase()) {
+                    "page" -> {
+                        val n = IniFieldParser.parseInt(value ?: "")
+                        if (n != null && n >= 0) {
+                            currentPage = n
+                            ensurePage(n)
+                        } else {
+                            issues += IniParseIssue(line.lineNumber, line.raw, "Nomor page tidak valid: '$value'")
+                        }
+                    }
+                    "pagesize" -> {
+                        val n = IniFieldParser.parseInt(value ?: "")
+                        if (n != null && n > 0) {
+                            ensurePage(currentPage)
+                            val existing = pages[currentPage]!!
+                            if (existing.size != null && existing.size != n) {
+                                issues += IniParseIssue(
+                                    line.lineNumber, line.raw,
+                                    "pageSize $n menimpa nilai lama ${existing.size} untuk page $currentPage"
+                                )
+                            }
+                            pages[currentPage] = existing.copy(size = n)
+                        } else {
+                            issues += IniParseIssue(line.lineNumber, line.raw, "pageSize tidak valid: '$value'")
+                        }
+                    }
+                    else -> {
+                        val fields = IniTokenizer.splitFields(value ?: "")
+                        if (IniFieldParser.looksLikeDefinition(fields.firstOrNull())) {
+                            if (fields.size < 3) {
+                                issues += IniParseIssue(line.lineNumber, line.raw, "Definisi konstanta terlalu pendek")
+                            } else {
+                                val def = IniFieldParser.parseConstant(
+                                    name = key.trim(),
+                                    fields = fields,
+                                    rawLine = line.raw,
+                                    page = currentPage,
+                                    lineNumber = line.lineNumber,
+                                    issues = issues
+                                )
+                                if (def != null) {
+                                    if (constants.containsKey(def.name)) {
+                                        issues += IniParseIssue(
+                                            line.lineNumber, line.raw,
+                                            "Konstanta duplikat: '${def.name}' (dipakai yang terakhir)"
+                                        )
+                                    }
+                                    ensurePage(currentPage)
+                                    constants[def.name] = def
+                                }
+                            }
+                        } else {
+                            // Assignment biasa (nilai default / ekspresi) → simpan mentah
+                            extraEntries += ExtraEntry(section, key, value ?: "", line.lineNumber)
+                        }
+                    }
+                }
+
+                "tableeditor" -> if (key.equals("table", ignoreCase = true)) {
+                    commitTable(currentTable, tables, issues)
+                    currentTable = parseTableHeader(value ?: "", line, issues)
+                } else {
+                    val table = currentTable
+                    val lk = key.lowercase()
+                    when {
+                        lk == "xbins" && table != null ->
+                            currentTable = table.copy(xBins = parseAxisBins(value ?: ""))
+
+                        lk == "ybins" && table != null ->
+                            currentTable = table.copy(yBins = parseAxisBins(value ?: ""))
+
+                        lk.endsWith("_xbins") || lk.endsWith("_ybins") -> {
+                            // Varian gaya lama: <mapName>_xBins = const, channel
+                            val isX = lk.endsWith("_xbins")
+                            val mapName = key.substringBeforeLast('_')
+                            val bins = parseAxisBins(value ?: "")
+                            if (bins == null) {
+                                issues += IniParseIssue(line.lineNumber, line.raw, "Isi $key tidak valid: '$value'")
+                            } else if (table != null && table.mapName?.equals(mapName, ignoreCase = true) == true) {
+                                currentTable = if (isX) table.copy(xBins = bins) else table.copy(yBins = bins)
+                            } else {
+                                val target = tables.values.firstOrNull {
+                                    it.mapName?.equals(mapName, ignoreCase = true) == true
+                                }
+                                if (target == null) {
+                                    issues += IniParseIssue(
+                                        line.lineNumber, line.raw,
+                                        "$key tidak bisa dipasangkan ke table manapun (mapName '$mapName' tidak dikenal)"
+                                    )
+                                } else {
+                                    tables[target.tableName] =
+                                        if (isX) target.copy(xBins = bins) else target.copy(yBins = bins)
+                                }
+                            }
+                        }
+
+                        lk == "xbins" || lk == "ybins" ->
+                            issues += IniParseIssue(line.lineNumber, line.raw, "$key muncul di luar blok table")
+
+                        else -> { /* atribut tampilan (gridHeight, upDownLabels, dst.) diabaikan */ }
+                    }
+                }
+
+                "outputchannels" -> {
+                    // command keys (ochGetCommand/ochBlockSize) sudah diserap scan global di atas
+                    if (!key.lowercase().let { it == "ochgetcommand" || it == "ochblocksize" }) {
+                        val fields = IniTokenizer.splitFields(value ?: "")
+                        if (IniFieldParser.looksLikeDefinition(fields.firstOrNull())) {
+                            if (fields.size < 3) {
+                                issues += IniParseIssue(line.lineNumber, line.raw, "Definisi channel terlalu pendek")
+                            } else {
+                                val def = IniFieldParser.parseConstant(
+                                    name = key.trim(),
+                                    fields = fields,
+                                    rawLine = line.raw,
+                                    page = PAGE_NOT_MAPPED,
+                                    lineNumber = line.lineNumber,
+                                    issues = issues
+                                )
+                                if (def != null) outputChannels[def.name] = def
+                            }
+                        }
+                        // assignment lain di [OutputChannels] bukan channel → diabaikan
+                    }
+                }
+
+                else -> {
+                    // [Menu], [CurveEditor], [GaugeConfigurations], [SettingGroups], dst.
+                    // belum dimodelkan → diabaikan tanpa error.
+                }
+            }
+        }
+
+        commitTable(currentTable, tables, issues)
+
+        return EcuDefinition(
+            meta = EcuMeta(
+                signature = signature?.takeIf { it.isNotEmpty() },
+                endianness = endianness
+            ),
+            commands = EcuCommands(
+                queryCommand = queryCommand,
+                versionInfo = versionInfo,
+                pageReadCommand = pageReadCommand,
+                pageChunkWrite = pageChunkWrite,
+                burnCommand = burnCommand,
+                crc32CheckCommand = crc32CheckCommand,
+                pageActivationCommand = pageActivationCommand,
+                ochGetCommand = ochGetCommand,
+                ochBlockSize = ochBlockSize,
+                blockingFactor = blockingFactor
+            ),
+            pages = pages.values.sortedBy { it.index },
+            constants = constants,
+            tables = tables,
+            outputChannels = outputChannels,
+            extraEntries = extraEntries,
+            issues = issues
+        )
+    }
+
+    private fun commitTable(
+        table: TableDefinition?,
+        into: LinkedHashMap<String, TableDefinition>,
+        issues: MutableList<IniParseIssue>
+    ) {
+        if (table == null) return
+        if (into.containsKey(table.tableName)) {
+            issues += IniParseIssue(
+                table.sourceLine, "",
+                "Definisi table duplikat: '${table.tableName}' (dipakai yang terakhir)"
+            )
+        }
+        into[table.tableName] = table
+    }
+
+    /** Header: table = tableName, mapName, "Judul", page */
+    private fun parseTableHeader(
+        value: String,
+        line: IniLine,
+        issues: MutableList<IniParseIssue>
+    ): TableDefinition? {
+        val fields = IniTokenizer.splitFields(value)
+        if (fields.size < 4) {
+            issues += IniParseIssue(
+                line.lineNumber, line.raw,
+                "Header table butuh 4 field: table = nama, map, \"judul\", page"
+            )
+            return null
+        }
+        val page = IniFieldParser.parseInt(fields[3])
+        if (page == null) {
+            issues += IniParseIssue(line.lineNumber, line.raw, "Nomor page table tidak valid: '${fields[3]}'")
+            return null
+        }
+        return TableDefinition(
+            tableName = fields[0].trim(),
+            mapName = fields[1].trim().takeIf { it.isNotEmpty() },
+            title = IniTokenizer.unquote(fields[2]).takeIf { it.isNotEmpty() },
+            page = page,
+            sourceLine = line.lineNumber
+        )
+    }
+
+    /** Value bins: "rpmBins, RPMValue" → AxisBins(constant, channel). */
+    private fun parseAxisBins(value: String): AxisBins? {
+        val fields = IniTokenizer.splitFields(value)
+        val constant = fields.getOrNull(0)?.trim()?.takeIf { it.isNotEmpty() }
+        return constant?.let {
+            AxisBins(
+                constantName = it,
+                liveChannelName = fields.getOrNull(1)?.trim()?.takeIf { c -> c.isNotEmpty() }
+            )
+        }
+    }
+}

@@ -1,0 +1,49 @@
+package com.ztune.app.domain.memory
+
+import com.ztune.app.domain.ini.model.Endianness
+
+/** Pasangan [ByteOrderReader]: menulis angka multi-byte dengan endianness data (dari INI). */
+object ByteOrderWriter {
+
+    fun u8(dest: ByteArray, offset: Int, value: Int) {
+        dest[offset] = (value and 0xFF).toByte()
+    }
+
+    fun s8(dest: ByteArray, offset: Int, value: Int) = u8(dest, offset, value)
+
+    fun u16(dest: ByteArray, offset: Int, value: Int, order: Endianness = Endianness.LITTLE) {
+        when (order) {
+            Endianness.LITTLE -> {
+                u8(dest, offset, value)
+                u8(dest, offset + 1, value shr 8)
+            }
+            Endianness.BIG -> {
+                u8(dest, offset + 1, value)
+                u8(dest, offset, value shr 8)
+            }
+        }
+    }
+
+    fun s16(dest: ByteArray, offset: Int, value: Int, order: Endianness = Endianness.LITTLE) =
+        u16(dest, offset, value.toShort().toInt() and 0xFFFF, order)
+
+    fun u32(dest: ByteArray, offset: Int, value: Long, order: Endianness = Endianness.LITTLE) {
+        when (order) {
+            Endianness.LITTLE -> {
+                u8(dest, offset, value.toInt())
+                u8(dest, offset + 1, (value shr 8).toInt())
+                u8(dest, offset + 2, (value shr 16).toInt())
+                u8(dest, offset + 3, (value shr 24).toInt())
+            }
+            Endianness.BIG -> {
+                u8(dest, offset + 3, value.toInt())
+                u8(dest, offset + 2, (value shr 8).toInt())
+                u8(dest, offset + 1, (value shr 16).toInt())
+                u8(dest, offset, (value shr 24).toInt())
+            }
+        }
+    }
+
+    fun f32(dest: ByteArray, offset: Int, value: Float, order: Endianness = Endianness.LITTLE) =
+        u32(dest, offset, value.toRawBits().toLong() and 0xFFFFFFFFL, order)
+}

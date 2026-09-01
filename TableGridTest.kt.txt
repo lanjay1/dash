@@ -1,0 +1,74 @@
+package com.ztune.app.domain.table
+
+import com.ztune.app.domain.ini.BundledEcuDefinition
+import com.ztune.app.domain.ini.IniDefinitionParser
+import com.ztune.app.domain.ini.model.Endianness
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class TableGridTest {
+
+    private val definition = IniDefinitionParser().parse(BundledEcuDefinition.INI)
+
+    private fun grid(pageSize: Int = 256): TableGrid {
+        val table = definition.tables.getValue("ignTable1Tbl")
+        val map = definition.constants.getValue(table.mapName!!)
+        val data = ByteArray(pageSize) // semua nol → ignition 0.0
+        return TableGrid(table, map, data, Endianness.LITTLE)
+    }
+
+    @Test
+    fun `dimensi 8x8 dan region byte 64`() {
+        val g = grid()
+        assertEquals(8, g.rows)
+        assertEquals(8, g.cols)
+        assertEquals(64, g.byteSize)
+        assertEquals(104, g.baseOffset)
+        assertEquals(64, g.regionBytes().size)
+    }
+
+    @Test
+    fun `set dan get nilai negatif ignition (S08 scale 0.5)`() {
+        val g = grid()
+        assertTrue(g.setPhysical(0, 0, -10.5))
+        assertEquals(-10.5, g.physical(0, 0)!!, 1e-9)
+    }
+
+    @Test
+    fun `set clamp ke range tipe`() {
+        val g = grid()
+        assertTrue(g.setPhysical(0, 0, 999.0)) // 999/0.5=1998 → clamp S08 ke 127 → 63.5
+        assertEquals(63.5, g.physical(0, 0)!!, 1e-9)
+    }
+
+    @Test
+    fun `ve table u08 scale 0.5 roundtrip`() {
+        val table = definition.tables.getValue("veTable1Tbl")
+        val map = definition.constants.getValue(table.mapName!!)
+        val g = TableGrid(table, map, ByteArray(256), Endianness.LITTLE)
+        assertTrue(g.setPhysical(3, 5, 87.5))
+        assertEquals(87.5, g.physical(3, 5)!!, 1e-9)
+        // 87.5/0.5 = 175 raw
+        assertEquals(175, g.data[g.baseOffset + (3 * 8 + 5)].toInt() and 0xFF)
+    }
+
+    @Test
+    fun `region di luar buffer ditolak di konstruktor`() {
+        val table = definition.tables.getValue("veTable1Tbl")
+        val map = definition.constants.getValue(table.mapName!!)
+        try {
+            TableGrid(table, map, ByteArray(32), Endianness.LITTLE) // butuh 16+64=80
+            org.junit.Assert.fail("Seharusnya IllegalArgumentException")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message!!.contains("di luar buffer"))
+        }
+    }
+
+    @Test
+    fun `set di luar grid mengembalikan false`() {
+        assertFalse(grid().setPhysical(8, 0, 1.0))
+        assertFalse(grid().setPhysical(0, 8, 1.0))
+    }
+}

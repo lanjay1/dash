@@ -1,0 +1,142 @@
+package com.ztune.app.domain.ini
+
+import com.ztune.app.domain.ini.model.ConstantKind
+import com.ztune.app.domain.ini.model.FieldType
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Before
+import org.junit.Test
+
+class IniFieldParserTest {
+
+    private val issues = mutableListOf<com.ztune.app.domain.ini.model.IniParseIssue>()
+
+    @Before
+    fun setUp() {
+        issues.clear()
+    }
+
+    private fun parse(name: String, value: String, page: Int = 1) =
+        IniFieldParser.parseConstant(
+            name = name,
+            fields = IniTokenizer.splitFields(value),
+            rawLine = "$name = $value",
+            page = page,
+            lineNumber = 42,
+            issues = issues
+        )
+
+    @Test
+    fun `scalar lengkap 9 field`() {
+        val def = parse("nCylinders", "scalar, U08, 0, \"cyl\", 1.0, 0.0, 1.0, 12.0, 0")
+        assertNotNull(def)
+        assertEquals(ConstantKind.SCALAR, def!!.kind)
+        assertEquals(FieldType.U08, def.type)
+        assertEquals(0, def.offset)
+        assertEquals("cyl", def.units)
+        assertEquals(1.0, def.scale, 1e-9)
+        assertEquals(0.0, def.translate, 1e-9)
+        assertEquals(1.0, def.min, 1e-9)
+        assertEquals(12.0, def.max, 1e-9)
+        assertEquals(0, def.digits)
+        assertEquals(1, def.byteSize())
+        assertTrue(issues.isEmpty())
+    }
+
+    @Test
+    fun `array 2D shape dan byteSize`() {
+        val def = parse("veTable1Map", "array, U08, 52, [16x16], \"%\", 0.5, 0.0, 0.0, 100.0, 1")
+        assertNotNull(def)
+        assertEquals(16, def!!.shape?.rows)
+        assertEquals(16, def.shape?.cols)
+        assertEquals(256, def.elementCount)
+        assertEquals(256, def.byteSize())
+        assertEquals(0.5, def.scale, 1e-9)
+        assertEquals(1, def.digits)
+    }
+
+    @Test
+    fun `array 1D shape implisit satu baris`() {
+        val def = parse("rpmBins", "array, U16, 4, [16], \"RPM\", 1.0, 0.0, 0.0, 25000.0, 0")
+        assertNotNull(def)
+        assertEquals(1, def!!.shape?.rows)
+        assertEquals(16, def.shape?.cols)
+        assertEquals(32, def.byteSize())
+    }
+
+    @Test
+    fun `bits dengan rentang dan label`() {
+        val def = parse(
+            "engineType",
+            "bits, U08, 1, [0:2], \"type\", 1.0, 0.0, 0.0, 7.0, 0, \"Off\", \"Gas\""
+        )
+        assertNotNull(def)
+        assertEquals(ConstantKind.BITS, def!!.kind)
+        assertEquals(0, def.bitRange?.lowBit)
+        assertEquals(2, def.bitRange?.highBitInclusive)
+        assertEquals(3, def.bitRange?.bitCount)
+        assertEquals(listOf("Off", "Gas"), def.labels)
+        assertEquals(1, def.byteSize())
+    }
+
+    @Test
+    fun `tipe tidak dikenal fail-closed`() {
+        val def = parse("bad", "scalar, WTF16, 0, \"x\", 1.0, 0.0, 0.0, 1.0, 0")
+        assertNull(def)
+        assertEquals(1, issues.size)
+        assertTrue(issues[0].message.contains("Tipe field tidak dikenal"))
+    }
+
+    @Test
+    fun `offset tidak valid fail-closed`() {
+        val def = parse("bad", "scalar, U08, abc, \"x\", 1.0, 0.0, 0.0, 1.0, 0")
+        assertNull(def)
+        assertEquals(1, issues.size)
+    }
+
+    @Test
+    fun `shape rusak fail-closed`() {
+        val def = parse("bad", "array, U08, 0, [abc], \"x\", 1.0, 0.0, 0.0, 1.0, 0")
+        assertNull(def)
+        assertEquals(1, issues.size)
+    }
+
+    @Test
+    fun `field tampilan rusak tetap diparse dengan NaN`() {
+        val def = parse("weird", "scalar, U08, 0, \"x\", abc, 0.0, 0.0, 1.0, 0")
+        assertNotNull(def)
+        assertTrue(def!!.scale.isNaN())
+        assertEquals(1, issues.size)
+    }
+
+    @Test
+    fun `translate dan min negatif terparse`() {
+        val def = parse("clt", "scalar, S16, 2, \"deg C\", 1.0, -40.0, -40.0, 215.0, 0")
+        assertNotNull(def)
+        assertEquals(-40.0, def!!.translate, 1e-9)
+        assertEquals(-40.0, def.min, 1e-9)
+        assertEquals(215.0, def.max, 1e-9)
+    }
+
+    @Test
+    fun `string kind dengan panjang`() {
+        val def = parse("driverName", "string, ASCII, 100, 32")
+        assertNotNull(def)
+        assertEquals(ConstantKind.STRING, def!!.kind)
+        assertEquals(FieldType.STRING, def.type)
+        assertEquals(32, def.stringLength)
+        assertEquals(32, def.byteSize())
+    }
+
+    @Test
+    fun `parseBitRange dan parseArrayShape langsung`() {
+        assertEquals(2, IniFieldParser.parseBitRange("[0:2]")?.highBitInclusive)
+        assertNull(IniFieldParser.parseBitRange("[2:0]"))
+        assertEquals(16, IniFieldParser.parseArrayShape("[16]")?.cols)
+        assertEquals(12, IniFieldParser.parseArrayShape("[12x16]")?.rows)
+        assertEquals(16, IniFieldParser.parseArrayShape("12x16")?.cols)
+        assertNull(IniFieldParser.parseArrayShape("[axb]"))
+    }
+}

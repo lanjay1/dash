@@ -1,0 +1,125 @@
+package com.ztune.app.data.transport
+
+import com.ztune.app.domain.protocol.DemoChannelSimulator
+import com.ztune.app.domain.protocol.DemoPageFactory
+import com.ztune.app.domain.protocol.EcuCommunicationException
+import com.ztune.app.domain.protocol.EcuTransport
+import com.ztune.app.domain.protocol.FakeEcu
+import java.io.IOException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.launch
+
+/** Skenario simulasi demo — dipilih dari Settings. */
+enum class DemoScenario { STABLE, NOISY, DROPS_ONCE }
+
+/**
+ * Transport demo dengan skenario:
+ * - STABLE    : perilaku identik FakeEcuTransport.
+ * - NOISY     : 15% balasan frame korup (CRC salah) + 5% write gagal —
+ *               mengetes error handling: streaming toleran tetap jalan,
+ *               operasi strict gagal bersih dengan pesan.
+ * - DROPS_ONCE: setelah [dropAfterMs] koneksi "dilepas" (kanal ditutup, write
+ *               gagal) — mengetes reconnect end-to-end; transport berikutnya
+ *               dibangun STABLE oleh AndroidEcuTransportSource.
+ */
+class DemoEcuTransport(
+    val scenario: DemoScenario = DemoScenario.STABLE,
+    val dropAfterMs: Long = DEFAULT_DROP_AFTER_MS,
+    ecu: FakeEcu = defaultDemoEcu()
+) : EcuTransport {
+
+    override val name: String = "Demo ECU (${scenarioLabel(scenario)})"
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val fromApp = Channel<ByteArray>(Channel.UNLIMITED)
+    private val toApp = Channel<ByteArray>(Channel.UNLIMITED)
+    private var serverJob: Job? = null
+    private var dropJob: Job? = null
+
+    @Volatile
+    private var broken = false
+
+    override val incoming: Flow<ByteArray> = toApp.receiveAsFlow()
+
+    override suspend fun connect() {
+        if (serverJob?.isActive == true) return
+        broken = false
+        serverJob = scope.launch {
+            for (packet in fromApp) {
+                val reply = try {
+                    ecu.respondToPacket(packet)
+                } catch (_: Exception) {
+                    null
+                }
+                if (reply != null) {
+                    val transformed = transformReply(reply)
+                    if (transformed != null) toApp.send(transformed)
+                }
+            }
+        }
+        if (scenario == DemoScenario.DROPS_ONCE) {
+            dropJob = scope.launch {
+                delay(dropAfterMs)
+                broken = true
+                toApp.close(IOException("Demo: perangkat dilepas (simulasi)"))
+            }
+        }
+    }
+
+    private fun transformReply(reply: ByteArray): ByteArray? {
+        if (scenario == DemoScenario.NOISY && Random.nextInt(100) < CORRUPT_CHANCE_PCT) {
+            return reply.copyOf().also {
+                it[it.size - 1] = (it[it.size - 1].toInt() xor 1).toByte()
+            }
+        }
+        return reply
+    }
+
+    override suspend fun write(bytes: ByteArray) {
+        if (broken) {
+            throw EcuCommunicationException.ConnectionClosed(IOException("Demo: koneksi sudah terputus"))
+        }
+        if (scenario == DemoScenario.NOISY && Random.nextInt(100) < WRITE_FAIL_PCT) {
+            throw IOException("Demo: gangguan tulis (simulasi)")
+        }
+        fromApp.send(bytes)
+    }
+
+    override suspend fun disconnect() {
+        serverJob?.cancel(); serverJob = null
+        dropJob?.cancel(); dropJob = null
+        broken = true
+        fromApp.close()
+        toApp.close()
+        scope.cancel()
+    }
+
+    companion object {
+        const val DEFAULT_DROP_AFTER_MS = 15_000L
+        const val CORRUPT_CHANCE_PCT = 15
+        const val WRITE_FAIL_PCT = 5
+
+        fun scenarioLabel(s: DemoScenario): String = when (s) {
+            DemoScenario.STABLE -> "stabil"
+            DemoScenario.NOISY -> "berisik"
+            DemoScenario.DROPS_ONCE -> "putus sekali"
+        }
+
+        fun defaultDemoEcu(): FakeEcu = FakeEcu(
+            pageOverrides = mapOf(
+                0 to DemoPageFactory.page0(),
+                1 to DemoPageFactory.page1()
+            ),
+            ochBlockSize = DemoChannelSimulator.BLOCK_SIZE,
+            outputBlockProvider = { t -> DemoChannelSimulator.block(t) }
+        )
+    }
+}

@@ -1,0 +1,109 @@
+package com.ztune.app.presentation.components
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.ztune.app.domain.datalog.DatalogSample
+import java.util.Locale
+import kotlin.math.ceil
+
+private val PALETTE = listOf(
+    Color(0xFF5CD6C0), Color(0xFFFFB865), Color(0xFFEF5350), Color(0xFF64B5F6),
+    Color(0xFFAB47BC), Color(0xFF9CCC65), Color(0xFFFFD54F), Color(0xFFA1887F),
+    Color(0xFF4DD0E1), Color(0xFFF06292)
+)
+
+fun channelColor(index: Int): Color = PALETTE[index % PALETTE.size]
+
+/**
+ * Grafik garis time-series: sumbu waktu (mm:ss relatif), tiap channel
+ * dinormalisasi ke min–max miliknya sendiri agar channel berskala beda
+ * (RPM vs AFR) tetap terbaca dalam satu overlay. Decimation ±1024 titik.
+ */
+@Composable
+fun LineChart(
+    samples: List<DatalogSample>,
+    visibleChannels: List<String>,
+    colors: Map<String, Color>,
+    modifier: Modifier = Modifier
+) {
+    val gridColor = MaterialTheme.colorScheme.surfaceVariant
+    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    Canvas(modifier = modifier) {
+        val w = size.width
+        val padTop = 8.dp.toPx()
+        val padBottom = 22.dp.toPx()
+        val h = (size.height - padTop - padBottom).coerceAtLeast(1f)
+
+        for (i in 0..4) {
+            val y = padTop + h * i / 4f
+            drawLine(gridColor, Offset(0f, y), Offset(w, y), strokeWidth = 1f)
+        }
+
+        if (samples.size < 2 || visibleChannels.isEmpty()) {
+            drawLine(
+                gridColor, Offset(0f, padTop + h / 2f), Offset(w, padTop + h / 2f),
+                strokeWidth = 2f, cap = StrokeCap.Round
+            )
+            return@Canvas
+        }
+
+        val t0 = samples.first().timestampMs
+        val timeSpan = (samples.last().timestampMs - t0).coerceAtLeast(1L).toFloat()
+
+        // Label waktu (relatif sejak awal)
+        drawIntoCanvas { canvas ->
+            val paint = android.graphics.Paint().apply {
+                color = labelColor.toArgb()
+                textSize = 10.sp.toPx()
+                isAntiAlias = true
+            }
+            for (i in 0..4) {
+                val elapsedSec = (timeSpan * i / 4f / 1000f).toInt()
+                val label = String.format(Locale.US, "%d:%02d", elapsedSec / 60, elapsedSec % 60)
+                val x = w * i / 4f
+                canvas.nativeCanvas.drawText(
+                    label, x - paint.measureText(label) / 2f, size.height - 4f, paint
+                )
+            }
+        }
+
+        visibleChannels.forEach { name ->
+            val points = samples.mapNotNull { s ->
+                s.values[name]?.takeUnless { it.isNaN() }?.let { s.timestampMs.toFloat() to it }
+            }
+            if (points.size < 2) return@forEach
+            var lo = Double.MAX_VALUE
+            var hi = -Double.MAX_VALUE
+            points.forEach { (_, v) -> if (v < lo) lo = v; if (v > hi) hi = v }
+            if (hi - lo < 1e-9) { lo -= 1.0; hi += 1.0 }
+            val range = (hi - lo).toFloat()
+            val step = ceil(points.size / 1024.0).toInt().coerceAtLeast(1)
+            val path = Path()
+            var started = false
+            points.forEachIndexed { index, (t, v) ->
+                if (index % step != 0 && index != points.lastIndex) return@forEachIndexed
+                val x = ((t - t0.toFloat()) / timeSpan) * w
+                val y = padTop + (1f - ((v - lo) / range).toFloat()) * h
+                if (started) path.lineTo(x, y) else { path.moveTo(x, y); started = true }
+            }
+            drawPath(
+                path,
+                colors[name] ?: channelColor(0),
+                style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+            )
+        }
+    }
+}

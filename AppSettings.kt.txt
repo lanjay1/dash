@@ -1,0 +1,23 @@
+package com.ztune.app.data.settings
+
+import com.ztune.app.data.transport.DemoScenario
+import kotlinx.coroutines.flow.StateFlow
+
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
+/** Preferensi aplikasi — interface agar testable (fake di unit test). */
+interface AppSettings {
+    val themeMode: StateFlow<ThemeMode>
+    val usbBaudRate: StateFlow<Int>
+    val autoReconnect: StateFlow<Boolean>
+    val reconnectMaxAttempts: StateFlow<Int>
+    val reconnectDelayMs: StateFlow<Long>
+    val demoScenario: StateFlow<DemoScenario>
+
+    fun setThemeMode(mode: ThemeMode)
+    fun setUsbBaudRate(baud: Int)
+    fun setAutoReconnect(enabled: Boolean)
+    fun setReconnectMaxAttempts(value: Int)
+    fun setReconnectDelayMs(value: Long)
+    fun setDemoScenario(scenario: DemoScenario)
+}

@@ -1,0 +1,26 @@
+package com.ztune.app.data.db
+
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+
+/**
+ * Codec kolom Room: Map<channel,nilai> dan List<channel> ↔ JSON.
+ * Pure & testable; NaN/Infinity tetap tersimpan (decode kembali jadi NaN).
+ */
+object ChannelValuesCodec {
+
+    private val json = Json {
+        allowSpecialFloatingPointValues = true
+        ignoreUnknownKeys = true
+    }
+
+    fun encodeValues(values: Map<String, Double>): String = json.encodeToString(values)
+
+    fun decodeValues(raw: String): Map<String, Double> =
+        runCatching { json.decodeFromString<Map<String, Double>>(raw) }.getOrDefault(emptyMap())
+
+    fun encodeNames(names: List<String>): String = json.encodeToString(names)
+
+    fun decodeNames(raw: String): List<String> =
+        runCatching { json.decodeFromString<List<String>>(raw) }.getOrDefault(emptyList())
+}

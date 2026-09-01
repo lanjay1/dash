@@ -1,0 +1,49 @@
+package com.ztune.app.domain.memory
+
+import com.ztune.app.domain.ini.model.ConstantDefinition
+import com.ztune.app.domain.ini.model.ConstantKind
+import com.ztune.app.domain.ini.model.EcuDefinition
+import com.ztune.app.domain.ini.model.Endianness
+
+/**
+ * Citra memori satu page ECU + kemampuan decode sesuai definisi INI.
+ * Immutable: data adalah snapshot hasil read; tulis balik = fase berikutnya.
+ */
+class PageBuffer(
+    val pageIndex: Int,
+    val data: ByteArray,
+    private val definition: EcuDefinition,
+    val byteOrder: Endianness
+) {
+
+    /** Konstanta page ini yang muat di buffer (fail-closed: yang overflow diabaikan). */
+    val pageConstants: List<ConstantDefinition> = definition.constants.values
+        .filter { it.page == pageIndex }
+        .filter { it.offset >= 0 && it.offset + it.byteSize() <= data.size }
+        .sortedBy { it.offset }
+
+    fun decodeScalar(name: String): Double? =
+        definition.constants[name]?.takeIf { it.page == pageIndex }
+            ?.let { ConstantDecoder.physical(it, data, 0, byteOrder) }
+
+    fun decodeArray(name: String): List<Double>? =
+        definition.constants[name]
+            ?.takeIf { it.page == pageIndex && it.kind == ConstantKind.ARRAY }
+            ?.let { ConstantDecoder.decodeArray(it, data, 0, byteOrder) }
+
+    fun decodeBits(name: String): List<String>? =
+        definition.constants[name]?.takeIf { it.page == pageIndex }
+            ?.let { ConstantDecoder.decodeBits(it, data, 0) }
+
+    fun decodeString(name: String): String? =
+        definition.constants[name]?.takeIf { it.page == pageIndex }
+            ?.let { ConstantDecoder.decodeString(it, data, 0) }
+
+    fun decodeAllScalars(): Map<String, Double> = buildMap {
+        for (c in pageConstants) {
+            if (c.kind == ConstantKind.SCALAR) {
+                ConstantDecoder.physical(c, data, 0, byteOrder)?.let { put(c.name, it) }
+            }
+        }
+    }
+}

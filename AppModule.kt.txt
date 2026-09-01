@@ -1,0 +1,42 @@
+package com.ztune.app.data.di
+
+import com.ztune.app.data.settings.AppSettings
+import com.ztune.app.data.settings.SharedPreferencesSettings
+import com.ztune.app.data.transport.AndroidEcuTransportSource
+import com.ztune.app.data.transport.EcuTransportSource
+import dagger.Binds
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.components.SingletonComponent
+import javax.inject.Qualifier
+import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class ApplicationScope
+
+@Module
+@InstallIn(SingletonComponent::class)
+object AppModule {
+    @Provides
+    @Singleton
+    @ApplicationScope
+    fun provideApplicationScope(): CoroutineScope =
+        CoroutineScope(SupervisorJob() + Dispatchers.Default)
+}
+
+@Module
+@InstallIn(SingletonComponent::class)
+abstract class BindingModule {
+    @Binds
+    @Singleton
+    abstract fun bindAppSettings(impl: SharedPreferencesSettings): AppSettings
+
+    @Binds
+    @Singleton
+    abstract fun bindEcuTransportSource(impl: AndroidEcuTransportSource): EcuTransportSource
+}

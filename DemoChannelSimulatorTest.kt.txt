@@ -1,0 +1,63 @@
+package com.ztune.app.domain.protocol
+
+import com.ztune.app.domain.ini.BundledEcuDefinition
+import com.ztune.app.domain.ini.IniDefinitionParser
+import com.ztune.app.domain.ini.model.Endianness
+import com.ztune.app.domain.memory.ConstantDecoder
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import kotlin.math.abs
+
+class DemoChannelSimulatorTest {
+
+    private val definition = IniDefinitionParser().parse(BundledEcuDefinition.INI)
+
+    @Test
+    fun `layout simulator cocok dengan offset channel di definisi INI`() {
+        assertEquals(DemoChannelSimulator.BLOCK_SIZE, definition.commands.ochBlockSize)
+        val expected = mapOf(
+            "RPM" to DemoChannelSimulator.OFFSET_RPM,
+            "MAP" to DemoChannelSimulator.OFFSET_MAP,
+            "CLT" to DemoChannelSimulator.OFFSET_CLT,
+            "IAT" to DemoChannelSimulator.OFFSET_IAT,
+            "TPS" to DemoChannelSimulator.OFFSET_TPS,
+            "AFR" to DemoChannelSimulator.OFFSET_AFR,
+            "lambda" to DemoChannelSimulator.OFFSET_LAMBDA,
+            "VBatt" to DemoChannelSimulator.OFFSET_VBATT,
+            "AFRTarget" to DemoChannelSimulator.OFFSET_AFR_TARGET
+        )
+        expected.forEach { (name, offset) ->
+            assertEquals("offset channel $name", offset, definition.outputChannels[name]?.offset)
+        }
+    }
+
+    @Test
+    fun `nilai idle pada t=0 terdekode kembali sesuai definisi`() {
+        val block = DemoChannelSimulator.block(0L)
+        val v = DemoChannelSimulator.valuesAt(0L)
+        assertEquals(v.rpm, decode("RPM", block)!!, 0.5)
+        assertEquals(v.tps, decode("TPS", block)!!, 0.5)
+        assertEquals(v.clt, decode("CLT", block)!!, 0.5)
+        assertEquals(v.afr, decode("AFR", block)!!, 0.05)
+        assertEquals(v.afrTarget, decode("AFRTarget", block)!!, 0.05)
+        assertEquals(v.vbatt, decode("VBatt", block)!!, 0.05)
+        val lambda = decode("lambda", block)!!
+        assertTrue(abs(lambda * 14.7 - decode("AFR", block)!!) < 0.3)
+    }
+
+    @Test
+    fun `siklus penuh throttle mencapai WOT pada t=6 detik`() {
+        val v = DemoChannelSimulator.valuesAt(6_000L)
+        assertTrue("RPM harus di atas 6000, dapat ${v.rpm}", v.rpm > 6000)
+        assertTrue("TPS harus di atas 80, dapat ${v.tps}", v.tps > 80)
+        assertTrue("AFR harus di bawah 13.5, dapat ${v.afr}", v.afr < 13.5)
+        // target lebih lean dari aktual saat beban tinggi → bahan demo AutoTune
+        assertTrue(v.afrTarget > v.afr)
+    }
+
+    private fun decode(name: String, block: ByteArray): Double? {
+        val channel = definition.outputChannels.getValue(name)
+        return ConstantDecoder.physical(channel, block, 0, Endianness.LITTLE)
+    }
+}
