@@ -291,12 +291,16 @@ class DataLogRecorder(private val context: Context) {
      * If the value contains a comma, double-quote, or newline, it is wrapped
      * in double-quotes and interior double-quotes are escaped by doubling them.
      */
+
     internal fun csvEscape(value: String): String {
-        if (value.contains(',') || value.contains('"') || value.contains('\n') || value.contains('\r')) {
-            return "\"${value.replace("\"", "\"\""}\""
+        if (value.contains(",") || value.contains("\"") ||
+                value.contains("\n") || value.contains("\r")) {
+            val dq = "\""
+            return dq + value.replace(dq, dq + dq) + dq
         }
         return value
     }
+
 
     companion object {
         /** Default flush interval (samples). */

@@ -385,10 +385,10 @@ class DataLogPlayback(private val file: File) {
          * Escape a single field for CSV output.
          */
         internal fun csvEscapeField(value: String): String {
-            if (value.contains(',') || value.contains('"') ||
-                value.contains('\n') || value.contains('\r')
-            ) {
-                return "\"${value.replace("\"", "\"\")}\""
+            val dq = "\""
+            if (value.contains(",") || value.contains(dq) ||
+                value.contains("\n") || value.contains("\r")) {
+                return dq + value.replace(dq, dq + dq) + dq
             }
             return value
         }
