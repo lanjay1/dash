@@ -6,6 +6,11 @@ import com.ztune.libretune.core.DataLogManager
 import com.ztune.libretune.core.EcuConnectionManager
 import com.ztune.libretune.core.EcuDefinitionRepository
 import com.ztune.libretune.core.TuneManager
+import com.ztune.libretune.core.git.TuneVersionControl
+import com.ztune.libretune.core.i18n.UnitPreferences
+import com.ztune.libretune.core.ini.EcuDefinition
+import com.ztune.libretune.core.realtime.RealtimeChannelStore
+import com.ztune.libretune.core.realtime.RealtimeDecoder
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -48,6 +53,28 @@ object AppModule {
         CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     // ------------------------------------------------------------------
+    //  Realtime
+    // ------------------------------------------------------------------
+
+    @Provides
+    @Singleton
+    fun provideRealtimeChannelStore(): RealtimeChannelStore {
+        return RealtimeChannelStore()
+    }
+
+    /**
+     * Provide [RealtimeDecoder] unscoped.
+     *
+     * The decoder depends on an [EcuDefinition] which changes per-connection,
+     * so callers should create a fresh instance (or use a factory / assisted
+     * inject) when the definition changes.
+     */
+    @Provides
+    fun provideRealtimeDecoder(definition: EcuDefinition): RealtimeDecoder {
+        return RealtimeDecoder(definition)
+    }
+
+    // ------------------------------------------------------------------
     //  Core managers
     // ------------------------------------------------------------------
 
@@ -61,15 +88,20 @@ object AppModule {
     @Singleton
     fun provideEcuConnectionManager(
         @ApplicationScope scope: CoroutineScope,
-        settings: AppSettings
+        settings: AppSettings,
+        channelStore: RealtimeChannelStore,
+        dataLogManager: DataLogManager
     ): EcuConnectionManager {
-        return EcuConnectionManager(scope, settings)
+        return EcuConnectionManager(scope, settings, channelStore, dataLogManager)
     }
 
     @Provides
     @Singleton
-    fun provideTuneManager(): TuneManager {
-        return TuneManager()
+    fun provideTuneManager(
+        @ApplicationContext context: Context,
+        decoder: RealtimeDecoder
+    ): TuneManager {
+        return TuneManager(context, decoder)
     }
 
     @Provides
@@ -82,5 +114,25 @@ object AppModule {
     @Singleton
     fun provideAppSettings(@ApplicationContext context: Context): AppSettings {
         return AppSettings(context)
+    }
+
+    // ------------------------------------------------------------------
+    //  Git version control
+    // ------------------------------------------------------------------
+
+    @Provides
+    @Singleton
+    fun provideTuneVersionControl(@ApplicationContext context: Context): TuneVersionControl {
+        return TuneVersionControl(context)
+    }
+
+    // ------------------------------------------------------------------
+    //  i18n / unit preferences
+    // ------------------------------------------------------------------
+
+    @Provides
+    @Singleton
+    fun provideUnitPreferences(@ApplicationContext context: Context): UnitPreferences {
+        return UnitPreferences.getInstance(context)
     }
 }

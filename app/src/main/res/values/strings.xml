@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">LibreTune</string>
+    <string name="app_name">ZTUNE</string>
 
     <!-- Navigation labels -->
     <string name="nav_home">Home</string>
@@ -7,6 +7,8 @@
     <string name="nav_tune_editor">Tune</string>
     <string name="nav_datalog">Datalog</string>
     <string name="nav_settings">Settings</string>
+    <string name="nav_calibration">Calibration</string>
+    <string name="nav_tools">Tools</string>
 
     <!-- Connection -->
     <string name="conn_title">ECU Connection</string>
@@ -21,8 +23,8 @@
     <string name="conn_devices_section">USB Devices</string>
 
     <!-- Home -->
-    <string name="home_title">LibreTune</string>
-    <string name="home_subtitle">Open-source ECU tuning for Megasquirt, Speeduino, rusEFI, and more.</string>
+    <string name="home_title">ZTUNE</string>
+    <string name="home_subtitle">Open-source ECU tuning for Android.</string>
     <string name="home_connection_title">ECU Status</string>
     <string name="home_not_connected">Not connected — connect an ECU via USB-OTG or use demo mode.</string>
     <string name="home_connected">Connected: %1$s</string>
@@ -52,6 +54,54 @@
     <string name="dl_stop">Stop &amp; Save</string>
     <string name="dl_not_connected">ECU connection required for recording.</string>
 
+    <!-- Calibration -->
+    <string name="cal_title">Sensor Calibration</string>
+    <string name="cal_tps">TPS Calibration</string>
+    <string name="cal_afr">AFR Calibration</string>
+    <string name="cal_clt">CLT Calibration</string>
+    <string name="cal_iat">IAT Calibration</string>
+    <string name="cal_map">MAP Calibration</string>
+    <string name="cal_baro">Baro Calibration</string>
+
+    <!-- AutoTune -->
+    <string name="at_title">AutoTune</string>
+    <string name="at_start">Start AutoTune</string>
+    <string name="at_stop">Stop</string>
+    <string name="at_send">Send Recommendations</string>
+    <string name="at_settings">Settings</string>
+
+    <!-- Lua Console -->
+    <string name="lua_title">Lua Console</string>
+    <string name="lua_execute">Execute</string>
+    <string name="lua_clear">Clear</string>
+
+    <!-- Tune History -->
+    <string name="th_title">Tune History</string>
+    <string name="th_restore">Restore</string>
+    <string name="th_prune">Prune Old</string>
+    <string name="th_diff">View Changes</string>
+
+    <!-- VE Analysis -->
+    <string name="va_title">VE Analysis</string>
+    <string name="va_run">Run Analysis</string>
+    <string name="va_apply">Apply to Table</string>
+
+    <!-- Diagnostics -->
+    <string name="diag_tooth_logger">Tooth Logger</string>
+    <string name="diag_console">ECU Console</string>
+
+    <!-- Curve Editor -->
+    <string name="ce_title">Curve Editor</string>
+    <string name="ce_smooth">Smooth</string>
+    <string name="ce_interpolate">Interpolate</string>
+
+    <!-- Tools -->
+    <string name="tools_lua">Lua Console</string>
+    <string name="tools_history">Tune History</string>
+    <string name="tools_analysis">VE Analysis</string>
+    <string name="tools_tooth">Tooth Logger</string>
+    <string name="tools_console">ECU Console</string>
+
     <!-- Settings -->
     <string name="settings_title">Settings</string>
     <string name="settings_appearance">Appearance</string>
@@ -66,4 +116,24 @@
     <string name="settings_max_attempts">Max attempts</string>
     <string name="settings_delay">Delay between attempts</string>
     <string name="settings_delay_fmt">%1$d ms</string>
+    <string name="settings_units">Units</string>
+    <string name="settings_temperature">Temperature</string>
+    <string name="settings_pressure">Pressure</string>
+    <string name="settings_afr_lambda">Display as Lambda</string>
+    <string name="settings_transport">Transport</string>
+    <string name="settings_bluetooth">Bluetooth</string>
+    <string name="settings_tcp">TCP / WiFi</string>
+    <string name="settings_version">Version</string>
+
+    <!-- Dialog -->
+    <string name="dialog_save">Save</string>
+    <string name="dialog_cancel">Cancel</string>
+    <string name="dialog_ok">OK</string>
+    <string name="dialog_discard">Discard</string>
+    <string name="dialog_confirm_restore">Restore this tune snapshot? Current unsaved changes will be lost.</string>
+    <string name="dialog_prune_confirm">Delete old tune snapshots beyond the limit?</string>
+
+    <!-- Help -->
+    <string name="help_title">Help</string>
+    <string name="help_no_topic">No help topic available.</string>
 </resources>
