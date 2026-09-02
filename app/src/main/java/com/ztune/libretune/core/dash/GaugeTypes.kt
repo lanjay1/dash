@@ -192,6 +192,10 @@ data class GaugeWidgetConfig(
             type: GaugeWidgetType = GaugeWidgetType.ANALOG_SWEEP,
             min: Double = 0.0,
             max: Double = 100.0,
+            lowWarning: Double = Double.NaN,
+            highWarning: Double = Double.NaN,
+            lowDanger: Double = Double.NaN,
+            highDanger: Double = Double.NaN,
             decimals: Int = 1
         ): GaugeWidgetConfig = GaugeWidgetConfig(
             id = id,
@@ -201,6 +205,10 @@ data class GaugeWidgetConfig(
             units = units,
             min = min,
             max = max,
+            lowWarning = lowWarning,
+            highWarning = highWarning,
+            lowDanger = lowDanger,
+            highDanger = highDanger,
             decimals = decimals
         )
 

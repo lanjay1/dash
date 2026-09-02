@@ -144,8 +144,8 @@ class SpeeduinoEcu : EcuInterface {
                     if (data != null) {
                         _realtimeUpdates.emit(RealtimeUpdate(rawData = data))
                     }
-                } catch (_: CancellationException) {
-                    throw _
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (_: Exception) {
                     // swallow and retry
                 }

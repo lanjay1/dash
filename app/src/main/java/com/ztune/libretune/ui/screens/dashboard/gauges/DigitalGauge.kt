@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -137,7 +138,7 @@ private fun LargeDigitalContent(
                     text = " ${config.units}",
                     color = onSurfaceVariant,
                     style = MaterialTheme.typography.titleMedium,
-                    textAlign = TextAlign.Bottom,
+                    textAlign = TextAlign.End,
                     maxLines = 1
                 )
             }
@@ -227,16 +228,16 @@ private fun ZoneIndicatorBar(
 
         // Low danger
         if (!config.lowDanger.isNaN()) {
-            val endFrac = ((config.lowDanger - config.min) / range).coerceIn(0f, 1f).toFloat()
+            val endFrac = ((config.lowDanger - config.min) / range).coerceIn(0.0, 1.0).toFloat()
             drawRect(color = Color(0xFFFF5252).copy(alpha = 0.5f), size = Size(w * endFrac, h))
         }
 
         // Low warning
         if (!config.lowWarning.isNaN()) {
             val startFrac = if (!config.lowDanger.isNaN()) {
-                ((config.lowDanger - config.min) / range).coerceIn(0f, 1f).toFloat()
+                ((config.lowDanger - config.min) / range).coerceIn(0.0, 1.0).toFloat()
             } else 0f
-            val endFrac = ((config.lowWarning - config.min) / range).coerceIn(0f, 1f).toFloat()
+            val endFrac = ((config.lowWarning - config.min) / range).coerceIn(0.0, 1.0).toFloat()
             drawRect(
                 color = Color(0xFFFFB74D).copy(alpha = 0.4f),
                 topLeft = androidx.compose.ui.geometry.Offset(w * startFrac, 0f),
@@ -246,9 +247,9 @@ private fun ZoneIndicatorBar(
 
         // High warning
         if (!config.highWarning.isNaN()) {
-            val startFrac = ((config.highWarning - config.min) / range).coerceIn(0f, 1f).toFloat()
+            val startFrac = ((config.highWarning - config.min) / range).coerceIn(0.0, 1.0).toFloat()
             val endFrac = if (!config.highDanger.isNaN()) {
-                ((config.highDanger - config.min) / range).coerceIn(0f, 1f).toFloat()
+                ((config.highDanger - config.min) / range).coerceIn(0.0, 1.0).toFloat()
             } else 1f
             drawRect(
                 color = Color(0xFFFFB74D).copy(alpha = 0.4f),
@@ -259,7 +260,7 @@ private fun ZoneIndicatorBar(
 
         // High danger
         if (!config.highDanger.isNaN()) {
-            val startFrac = ((config.highDanger - config.min) / range).coerceIn(0f, 1f).toFloat()
+            val startFrac = ((config.highDanger - config.min) / range).coerceIn(0.0, 1.0).toFloat()
             drawRect(
                 color = Color(0xFFFF5252).copy(alpha = 0.5f),
                 topLeft = androidx.compose.ui.geometry.Offset(w * startFrac, 0f),
@@ -268,7 +269,7 @@ private fun ZoneIndicatorBar(
         }
 
         // Value position indicator
-        val valFrac = ((config.clamp(value) - config.min) / range).coerceIn(0f, 1f).toFloat()
+        val valFrac = ((config.clamp(value) - config.min) / range).coerceIn(0.0, 1.0).toFloat()
         val indicatorX = w * valFrac
         drawCircle(
             color = Color.White,

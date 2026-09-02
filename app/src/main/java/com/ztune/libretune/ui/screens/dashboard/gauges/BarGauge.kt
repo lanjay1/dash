@@ -109,7 +109,7 @@ private fun HorizontalBarContent(
     onSurfaceVariant: Color
 ) {
     val range = config.max - config.min
-    val fraction = if (range != 0.0) ((value - config.min) / range).coerceIn(0f, 1f) else 0f
+    val fraction = if (range != 0.0) ((value - config.min) / range).coerceIn(0.0, 1.0) else 0f
     val animatedFraction by animateFloatAsState(
         targetValue = fraction,
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 150)
@@ -218,7 +218,7 @@ private fun VerticalBarContent(
     onSurfaceVariant: Color
 ) {
     val range = config.max - config.min
-    val fraction = if (range != 0.0) ((value - config.min) / range).coerceIn(0f, 1f) else 0f
+    val fraction = if (range != 0.0) ((value - config.min) / range).coerceIn(0.0, 1.0) else 0f
     val animatedFraction by animateFloatAsState(
         targetValue = fraction,
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 150)
@@ -321,7 +321,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawBarZoneBackgrou
 
     for ((threshold, zoneName, color) in zones) {
         if (threshold.isNaN()) continue
-        val frac = ((threshold - config.min) / range).coerceIn(0f, 1f).toFloat()
+        val frac = ((threshold - config.min) / range).coerceIn(0.0, 1.0).toFloat()
         val pos = barWidth * frac
         val markWidth = 1.5.dp.toPx()
 
@@ -353,7 +353,7 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawScaleTicks(
     )
 
     for (t in thresholds) {
-        val frac = ((t - config.min) / range).coerceIn(0f, 1f).toFloat()
+        val frac = ((t - config.min) / range).coerceIn(0.0, 1.0).toFloat()
         if (isVertical) {
             val y = barHeight * (1f - frac)
             drawLine(tickColor, Offset(0f, y), Offset(tickLen, y))

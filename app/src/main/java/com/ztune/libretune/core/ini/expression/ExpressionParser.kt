@@ -393,7 +393,7 @@ class Parser(private val input: String) {
         val trueExpr = parseTernary() // allow nested ternaries in true-branch
         if (trueExpr.isFailure) return trueExpr
         val colon = expect(TokenKind.COLON)
-        if (colon.isFailure) return colon
+        if (colon.isFailure) return err((colon as ExprResult.Err).message)
         val falseExpr = parseTernary() // right-associative
         if (falseExpr.isFailure) return falseExpr
         return ok(Expr.Ternary(condition.getOrNull()!!, trueExpr.getOrNull()!!, falseExpr.getOrNull()!!))
@@ -734,8 +734,13 @@ fun evaluate(
     expr: Expr,
     variables: Map<String, Double>,
     functions: Map<String, FunctionCallHandler>? = null,
-): ExprResult<Double> {
+): ExprResult<Double> = EvalContext(variables, functions).eval(expr)
 
+/** Internal evaluation context holding variable/function bindings. */
+private class EvalContext(
+    private val variables: Map<String, Double>,
+    private val functions: Map<String, FunctionCallHandler>?,
+) {
     fun eval(e: Expr): ExprResult<Double> = when (e) {
         is Expr.Number -> ok(e.value)
 
@@ -908,8 +913,6 @@ fun evaluate(
             else -> err("Unknown function '$name'")
         }
     }
-
-    return eval(expr)
 }
 
 // ---------------------------------------------------------------------------

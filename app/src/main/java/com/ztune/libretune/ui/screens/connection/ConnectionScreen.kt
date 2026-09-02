@@ -18,7 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Usb
+import androidx.compose.material.icons.filled.Usb
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Cyclone
@@ -337,7 +337,7 @@ private fun EmptyDeviceCard() {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Icon(
-                Icons.AutoMirrored.Filled.Usb,
+                Icons.Filled.Usb,
                 contentDescription = null,
                 modifier = Modifier.size(48.dp),
                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
@@ -387,7 +387,7 @@ private fun UsbDeviceCard(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.AutoMirrored.Filled.Usb,
+                Icons.Filled.Usb,
                 contentDescription = null,
                 modifier = Modifier.size(24.dp),
                 tint = if (isSelected) {
@@ -494,7 +494,7 @@ private fun ActionButtons(
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(stringResource(R.string.conn_status_connecting))
             } else {
-                Icon(Icons.AutoMirrored.Filled.Usb, contentDescription = null, modifier = Modifier.size(18.dp))
+                Icon(Icons.Filled.Usb, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Connect ECU")
             }

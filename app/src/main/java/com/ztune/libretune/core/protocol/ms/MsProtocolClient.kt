@@ -312,6 +312,10 @@ class MsProtocolClient(private val transport: EcuTransport) {
                     }
                 }
             }
+            // Unreachable — while(true) only exits via return@withTimeout or exception.
+            // Explicit ByteArray return helps the Kotlin compiler's type inference.
+            @Suppress("UNREACHABLE_CODE")
+            ByteArray(0)
         }
     }
 

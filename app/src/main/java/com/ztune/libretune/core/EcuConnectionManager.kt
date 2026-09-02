@@ -153,7 +153,6 @@ class EcuConnectionManager(
         generation++
         connectJob?.cancel()
         connectJob = null
-        transport?.let { runCatching { it.disconnect() } }
         transport = null
         ecuInterface = null
         activeDefinition = null

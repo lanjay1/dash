@@ -44,22 +44,22 @@ object TableColorUtils {
                 val green = (200f * localT)
                 val blue = (255f * (1f - localT))
                 Color(
-                    red = red / 255f,
-                    green = green / 255f,
-                    blue = blue / 255f,
+                    red = red,
+                    green = green,
+                    blue = blue,
                     alpha = 0.85f
                 )
             }
             else -> {
                 // Green → Red
                 val localT = (t - 0.5) / 0.5 // 0..1 within the second half
-                val red = (255f * localT)
-                val green = (200f * (1f - localT))
+                val red = 255f * localT
+                val green = 200f * (1f - localT)
                 val blue = 0f
                 Color(
-                    red = red / 255f,
-                    green = green / 255f,
-                    blue = blue / 255f,
+                    red = red,
+                    green = green,
+                    blue = blue,
                     alpha = 0.85f
                 )
             }

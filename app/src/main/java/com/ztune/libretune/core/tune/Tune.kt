@@ -77,7 +77,7 @@ data class Tune(
     fun deepCopy(): Tune = copy(
         pageData = pageData.mapValues { it.value.copyOf() },
         constantValues = constantValues.toMutableMap(),
-        tableValues = tableValues.mapValues { table -> table.map { row -> row.toList() } }.toMutableMap(),
+        tableValues = tableValues.map { (k, v) -> k to v.map { it.toList() } }.toMutableMap(),
         curveValues = curveValues.toMutableMap()
     )
 

@@ -371,7 +371,7 @@ private fun CellEditDialog(
                 )
                 if (errorText != null) {
                     Text(
-                        text = errorText,
+                        text = errorText!!,
                         color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(top = 4.dp)

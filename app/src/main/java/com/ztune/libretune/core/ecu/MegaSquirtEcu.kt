@@ -126,8 +126,8 @@ class MegaSquirtEcu : EcuInterface {
                     if (data != null) {
                         _realtimeUpdates.emit(RealtimeUpdate(rawData = data))
                     }
-                } catch (_: CancellationException) {
-                    throw _ // re-throw so coroutine cancellation propagates
+                } catch (e: CancellationException) {
+                    throw e // re-throw so coroutine cancellation propagates
                 } catch (_: Exception) {
                     // Individual read failures are swallowed; the loop retries.
                 }

@@ -126,7 +126,7 @@ class ConnectionViewModel @Inject constructor(
                 devices.add(
                     UsbDeviceInfo(
                         name = buildString {
-                            append(driver.driverClassName)
+                            append(driver.javaClass.simpleName)
                             if (dev.productName != null) append(" – ${dev.productName}")
                         },
                         deviceId = dev.deviceId,

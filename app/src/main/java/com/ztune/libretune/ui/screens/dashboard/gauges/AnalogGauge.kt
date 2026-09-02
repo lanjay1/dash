@@ -15,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -27,6 +26,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ztune.libretune.core.dash.GaugeColorScheme
 import com.ztune.libretune.core.dash.GaugeWidgetConfig
 import kotlin.math.PI
@@ -69,7 +69,7 @@ fun AnalogGauge(
 ) {
     val clampedValue = config.clamp(value)
     val fraction = if (config.max != config.min) {
-        ((clampedValue - config.min) / (config.max - config.min)).coerceIn(0f, 1f)
+        ((clampedValue - config.min) / (config.max - config.min)).toFloat().coerceIn(0.0f, 1.0f)
     } else 0f
 
     val zone = config.zoneFor(value)
@@ -121,11 +121,7 @@ fun AnalogGauge(
             val valueSweep = style.arcSweep * fraction
             if (fraction > 0.001f) {
                 drawArc(
-                    brush = Brush.sweepGradient(
-                        colors = listOf(colors.safe, colors.safe, colors.primary),
-                        startAngle = style.startAngle,
-                        endAngle = style.startAngle + valueSweep
-                    ),
+                    color = colors.primary,
                     startAngle = style.startAngle,
                     sweepAngle = valueSweep,
                     useCenter = false,
@@ -166,11 +162,11 @@ fun AnalogGauge(
                         text = label,
                         style = androidx.compose.ui.text.TextStyle(
                             color = onSurfaceVariant,
-                            fontSize = 9.dp.toPx()
+                            fontSize = 9.sp
                         )
                     )
                     drawText(
-                        textLayout = textLayout,
+                        textLayoutResult = textLayout,
                         topLeft = Offset(
                             labelX - textLayout.size.width / 2f,
                             labelY - textLayout.size.height / 2f
@@ -224,11 +220,11 @@ fun AnalogGauge(
                 text = valueText,
                 style = androidx.compose.ui.text.TextStyle(
                     color = colors.valueText,
-                    fontSize = 20.dp.toPx()
+                    fontSize = 20.sp
                 )
             )
             drawText(
-                textLayout = valueLayout,
+                textLayoutResult = valueLayout,
                 topLeft = Offset(
                     cx - valueLayout.size.width / 2f,
                     cy + 18.dp.toPx()
@@ -241,11 +237,11 @@ fun AnalogGauge(
                     text = config.units,
                     style = androidx.compose.ui.text.TextStyle(
                         color = onSurfaceVariant,
-                        fontSize = 10.dp.toPx()
+                        fontSize = 10.sp
                     )
                 )
                 drawText(
-                    textLayout = unitLayout,
+                    textLayoutResult = unitLayout,
                     topLeft = Offset(
                         cx - unitLayout.size.width / 2f,
                         cy + 18.dp.toPx() + valueLayout.size.height + 2.dp.toPx()

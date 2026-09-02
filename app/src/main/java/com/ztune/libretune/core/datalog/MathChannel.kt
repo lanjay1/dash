@@ -177,9 +177,10 @@ class MathChannelEngine {
         variables: Map<String, Double>
     ): Double {
         // Lazily parse and cache the AST
-        val ast: Expr? = exprCache.getOrPut(def.expression) {
+        val ast = exprCache.getOrPut(def.expression) {
             ExprParser(def.expression).parse().getOrNull()
-        } ?: return Double.NaN  // parse failure
+        }
+        if (ast == null) return Double.NaN
 
         return evalExpr(ast, variables).getOrDefault(Double.NaN)
     }

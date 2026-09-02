@@ -87,9 +87,13 @@ class UsbSerialTransport(
                 while (totalRead < capped && System.currentTimeMillis() < deadline) {
                     val remaining = capped - totalRead
                     val chunkSize = remaining.coerceAtMost(512)
-                    val n = p.read(buf, totalRead, chunkSize)
+                    val tmpBuf = ByteArray(chunkSize)
+                    val n = p.read(tmpBuf, READ_TIMEOUT_MS)
                     when {
-                        n > 0 -> totalRead += n
+                        n > 0 -> {
+                            System.arraycopy(tmpBuf, 0, buf, totalRead, n)
+                            totalRead += n
+                        }
                         n < 0 -> throw TransportException("USB read error")
                         // n == 0: spin until timeout
                     }
