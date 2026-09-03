@@ -2,8 +2,9 @@ package com.ztune.libretune.ui.screens.diagnostics
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ztune.libretune.core.EcuConnectionManager
+import com.ztune.libretune.core.ecu.EcuInterface
 import com.ztune.libretune.core.ecu.ToothLoggerTransport
-import com.ztune.libretune.core.connection.EcuInterface
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -29,10 +30,8 @@ data class ToothLoggerState(
 
 @HiltViewModel
 class ToothLoggerViewModel @Inject constructor(
-    private val ecu: EcuInterface,
+    private val connectionManager: EcuConnectionManager,
 ) : ViewModel() {
-
-    private val transport = ToothLoggerTransport(ecu)
 
     private val _state = MutableStateFlow(ToothLoggerState())
     val state: StateFlow<ToothLoggerState> = _state.asStateFlow()
@@ -43,6 +42,11 @@ class ToothLoggerViewModel @Inject constructor(
 
     fun startCapture() {
         viewModelScope.launch {
+            val ecu: EcuInterface = connectionManager.ecuInterface ?: run {
+                _state.update { it.copy(error = "ECU not connected") }
+                return@launch
+            }
+            val transport = ToothLoggerTransport(ecu)
             _state.update { it.copy(isCapturing = true, error = null) }
             try {
                 transport.startCapture()
@@ -54,6 +58,11 @@ class ToothLoggerViewModel @Inject constructor(
 
     fun stopCapture() {
         viewModelScope.launch {
+            val ecu: EcuInterface = connectionManager.ecuInterface ?: run {
+                _state.update { it.copy(error = "ECU not connected") }
+                return@launch
+            }
+            val transport = ToothLoggerTransport(ecu)
             try {
                 val events = transport.stopCapture()
                 val stats = analyzePattern(events)

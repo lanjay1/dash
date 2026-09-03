@@ -2,7 +2,8 @@ package com.ztune.libretune.ui.screens.diagnostics
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ztune.libretune.core.connection.EcuInterface
+import com.ztune.libretune.core.EcuConnectionManager
+import com.ztune.libretune.core.ecu.EcuInterface
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +23,7 @@ data class ConsoleOutputLine(
 
 @HiltViewModel
 class EcuConsoleViewModel @Inject constructor(
-    private val ecu: EcuInterface,
+    private val connectionManager: EcuConnectionManager,
 ) : ViewModel() {
 
     private val _outputLines = MutableStateFlow<List<ConsoleOutputLine>>(emptyList())
@@ -43,11 +44,17 @@ class EcuConsoleViewModel @Inject constructor(
             echoCommand(cmd)
             commandHistory.addLast(cmd)
 
+            val ecu: EcuInterface = connectionManager.ecuInterface ?: run {
+                appendOutput("Error: ECU not connected")
+                return@launch
+            }
+
             try {
                 val response = ecu.sendControllerCommand(
-                    code = 0x00,
-                    data = cmd.toByteArray(Charsets.UTF_8),
-                )
+                    name = "console",
+                    commandTemplate = cmd,
+                    value = 0,
+                ).getOrThrow()
                 val text = String(response, Charsets.UTF_8).trim()
                 appendOutput(text)
             } catch (e: Exception) {

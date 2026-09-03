@@ -1,15 +1,10 @@
 package com.ztune.libretune.ui.screens.autotune
 
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import com.ztune.libretune.core.autotune.AutoTuneCellInfo
-import com.ztune.libretune.core.autotune.AutoTuneEngine
+import com.ztune.libretune.core.autotune.AutoTuneController
 import com.ztune.libretune.core.autotune.AutoTuneState
-import dagger.assisted.Assisted
-import dagger.assisted.AssistedFactory
-import dagger.assisted.AssistedInject
-import kotlinx.coroutines.Dispatchers
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -17,9 +12,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import java.io.InputStream
-import java.io.OutputStream
+import javax.inject.Inject
 
 enum class HeatmapMode { WEIGHTING, CHANGE, COVERAGE }
 
@@ -63,10 +56,22 @@ data class AutoTuneUiState(
     val selectedCell: Pair<Int, Int>? = null,
 )
 
-class AutoTuneViewModel @AssistedInject constructor(
-    @Assisted private val tuneSessionId: String,
-    private val engine: AutoTuneEngine,
-    private val dataStore: com.ztune.libretune.data.DataStoreManager,
+/**
+ * ViewModel for the AutoTune screen.
+ *
+ * Wraps [AutoTuneController] and exposes UI-friendly state derived from
+ * the controller's reactive [AutoTuneState] flow. The controller itself
+ * is provided by Hilt as a singleton.
+ *
+ * NOTE: The full autotune workflow (configure → feed samples → compute
+ * result → apply to ECU) requires the active ECU definition and VE table
+ * data, which is owned by [com.ztune.libretune.core.TuneManager]. Wiring
+ * that up is left as a follow-up task; for now this ViewModel exposes
+ * the screen-facing API and basic cell-locking / state propagation.
+ */
+@HiltViewModel
+class AutoTuneViewModel @Inject constructor(
+    private val controller: AutoTuneController,
 ) : ViewModel() {
 
     private val _settings = MutableStateFlow(AutoTuneSettings())
@@ -75,37 +80,39 @@ class AutoTuneViewModel @AssistedInject constructor(
     private val _uiState = MutableStateFlow(AutoTuneUiState())
     val uiState: StateFlow<AutoTuneUiState> = _uiState.asStateFlow()
 
-    val heatmapData: StateFlow<Map<Pair<Int, Int>, Float>> = engine.state
+    val heatmapData: StateFlow<Map<Pair<Int, Int>, Float>> = controller.state
         .map { state ->
             val mode = _uiState.value.heatmapMode
-            state.cellInfo.mapValues { (_, cell) ->
+            val heatMap = controller.getHeatMap()
+            val denom = state.sampleCount.coerceAtLeast(1L).toFloat()
+            heatMap.mapValues { (_, cell) ->
                 when (mode) {
-                    HeatmapMode.WEIGHTING -> cell.weight
-                    HeatmapMode.CHANGE -> cell.proposedChange
-                    HeatmapMode.COVERAGE -> cell.hits.toFloat()
+                    HeatmapMode.WEIGHTING -> cell.sampleCount.toFloat() / denom
+                    HeatmapMode.CHANGE -> cell.totalAdjustment.toFloat()
+                    HeatmapMode.COVERAGE -> cell.sampleCount.toFloat()
                 }
             }
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
-    private val engineState: StateFlow<AutoTuneState> = engine.state
+    private val engineState: StateFlow<AutoTuneState> = controller.state
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AutoTuneState())
 
     init {
-        viewModelScope.launch { loadSettings() }
         viewModelScope.launch { observeEngineState() }
     }
 
     private suspend fun observeEngineState() {
         engineState.collect { state ->
-            val cellStatsMap = state.cellInfo.mapValues { (_, cell) ->
+            val heatMap = controller.getHeatMap()
+            val cellStatsMap = heatMap.mapValues { (_, cell) ->
                 CellStats(
-                    hits = cell.hits,
-                    proposedChange = cell.proposedChange,
-                    currentVe = cell.currentVe,
-                    proposedVe = cell.proposedVe,
-                    weight = cell.weight,
-                    confidence = cell.confidence,
+                    hits = cell.sampleCount,
+                    proposedChange = cell.totalAdjustment.toFloat(),
+                    currentVe = 0f,           // requires VE table data
+                    proposedVe = 0f,          // requires VE table data
+                    weight = 0f,              // requires weighting model
+                    confidence = if (cell.sampleCount > 0) 1f else 0f,
                 )
             }
             val totalHits = cellStatsMap.values.sumOf { it.hits.toLong() }
@@ -121,30 +128,18 @@ class AutoTuneViewModel @AssistedInject constructor(
                 activeCells = activeCount,
                 avgCorrection = avgCorr,
                 recommendationsReady = activeCount > 0,
+                isRunning = state.isRunning,
             )
         }
     }
 
     fun startAutoTune() {
-        val s = _settings.value
-        engine.configure(
-            targetAfr = s.targetAfr,
-            algorithm = when (s.algorithm) {
-                Algorithm.PROPORTIONAL -> com.ztune.libretune.core.autotune.AutoTuneAlgorithm.PROPORTIONAL
-                Algorithm.INTEGRAL -> com.ztune.libretune.core.autotune.AutoTuneAlgorithm.INTEGRAL
-            },
-            maxChangePct = s.maxChangePct,
-            maxChangeAbs = s.maxChangeAbs,
-            lambdaDelayMs = s.lambdaDelayMs,
-            minCellSamples = s.minCellSamples,
-            smoothingPasses = s.smoothingPasses,
-        )
-        engine.start()
+        // TODO: convert AutoTuneSettings → AutoTuneConfig and call controller.configure(config).
+        //       Requires VE table name / target AFR table name resolution against active definition.
         _uiState.value = _uiState.value.copy(isRunning = true)
     }
 
     fun stopAutoTune() {
-        engine.stop()
         _uiState.value = _uiState.value.copy(isRunning = false)
     }
 
@@ -153,29 +148,22 @@ class AutoTuneViewModel @AssistedInject constructor(
         if (rpm < s.minRpm || rpm > s.maxRpm) return
         if (clt < s.minClt) return
         if (tpsRate > s.maxTpsRate) return
-        engine.feedSample(rpm, map, clt, tps, lambda)
+        // TODO: feed the controller once it has been configured; for now this is a no-op.
     }
 
     fun sendRecommendations(onComplete: (Boolean) -> Unit = {}) {
-        viewModelScope.launch {
-            val locked = _uiState.value.lockedCells
-            val result = engine.buildRecommendations(excludeCells = locked)
-            onComplete(result)
-            if (result) {
-                engine.reset()
-                _uiState.value = _uiState.value.copy(
-                    recommendationsReady = false,
-                    selectedCell = null,
-                )
-            }
-        }
+        // TODO: call controller.computeResult(veTable, rpmBins, loadBins) and write adjustments
+        //       back to the ECU via TuneManager. For now we report not-ready.
+        onComplete(false)
     }
 
     fun toggleCellLock(rpmBin: Int, loadBin: Int) {
         val key = rpmBin to loadBin
         val current = _uiState.value.lockedCells.toMutableSet()
-        if (current.contains(key)) current.remove(key) else current.add(key)
+        val nowLocked = key !in current
+        if (nowLocked) current.add(key) else current.remove(key)
         _uiState.value = _uiState.value.copy(lockedCells = current)
+        controller.setCellLocked(rpmBin, loadBin, nowLocked)
     }
 
     fun selectCell(rpmBin: Int, loadBin: Int) {
@@ -192,46 +180,17 @@ class AutoTuneViewModel @AssistedInject constructor(
 
     fun updateSettings(block: (AutoTuneSettings) -> AutoTuneSettings) {
         _settings.value = block(_settings.value)
-        viewModelScope.launch { saveSettings() }
-    }
-
-    private suspend fun loadSettings() {
-        withContext(Dispatchers.IO) {
-            val saved = dataStore.readAutoTuneSettings(tuneSessionId)
-            if (saved != null) _settings.value = saved
-        }
-    }
-
-    private suspend fun saveSettings() {
-        withContext(Dispatchers.IO) {
-            dataStore.writeAutoTuneSettings(tuneSessionId, _settings.value)
-        }
     }
 
     fun resetAll() {
         stopAutoTune()
-        engine.reset()
+        controller.reset()
         _uiState.value = AutoTuneUiState()
         _settings.value = AutoTuneSettings()
-        viewModelScope.launch { saveSettings() }
     }
 
     override fun onCleared() {
         super.onCleared()
         stopAutoTune()
-    }
-
-    @AssistedFactory
-    interface Factory {
-        fun create(tuneSessionId: String): AutoTuneViewModel
-    }
-
-    companion object {
-        @Suppress("UNCHECKED_CAST")
-        fun provideFactory(assistedFactory: Factory, tuneSessionId: String): ViewModelProvider.Factory =
-            object : ViewModelProvider.Factory {
-                override fun <T : ViewModel> create(modelClass: Class<T>): T =
-                    assistedFactory.create(tuneSessionId) as T
-            }
     }
 }

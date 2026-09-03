@@ -6,7 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.ztune.libretune.core.git.TuneCommit
 import com.ztune.libretune.core.git.TuneDiffResult
 import com.ztune.libretune.core.git.TuneVersionControl
-import com.ztune.libretune.model.Tune
+import com.ztune.libretune.core.tune.Tune
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow

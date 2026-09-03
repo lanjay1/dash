@@ -1,6 +1,7 @@
 package com.ztune.libretune.di
 
 import android.content.Context
+import com.ztune.libretune.core.autotune.AutoTuneController
 import com.ztune.libretune.core.AppSettings
 import com.ztune.libretune.core.DataLogManager
 import com.ztune.libretune.core.EcuConnectionManager
@@ -114,6 +115,16 @@ object AppModule {
     @Singleton
     fun provideAppSettings(@ApplicationContext context: Context): AppSettings {
         return AppSettings(context)
+    }
+
+    // ------------------------------------------------------------------
+    //  AutoTune
+    // ------------------------------------------------------------------
+
+    @Provides
+    @Singleton
+    fun provideAutoTuneController(): AutoTuneController {
+        return AutoTuneController()
     }
 
     // ------------------------------------------------------------------
