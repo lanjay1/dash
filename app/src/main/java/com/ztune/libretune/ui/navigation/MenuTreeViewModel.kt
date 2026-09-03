@@ -17,10 +17,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ztune.libretune.core.ini.EcuDefinition
 import com.ztune.libretune.core.ini.types.Menu
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 enum class MenuNodeType {
     FOLDER,
@@ -48,7 +50,10 @@ data class MenuItemUi(
     val disabledReason: String? = null
 )
 
-class MenuTreeViewModel(definition: EcuDefinition?) : ViewModel() {
+@HiltViewModel
+class MenuTreeViewModel @Inject constructor(
+    definition: EcuDefinition
+) : ViewModel() {
 
     private val _menuTree = MutableStateFlow<List<MenuItemUi>>(emptyList())
     val menuTree: StateFlow<List<MenuItemUi>> = _menuTree
@@ -69,7 +74,7 @@ class MenuTreeViewModel(definition: EcuDefinition?) : ViewModel() {
     private val searchableIndex = mutableMapOf<String, MenuItemUi>()
 
     init {
-        if (definition != null) {
+        if (definition.tables.isNotEmpty() || definition.menus.isNotEmpty()) {
             buildTree(definition)
         }
         viewModelScope.launch {

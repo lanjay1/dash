@@ -260,7 +260,7 @@ class VeAnalysisViewModel @Inject constructor(
     private fun autoMapChannels(channels: List<String>): ChannelMapping {
         val chSet = channels.toSet()
         return ChannelMapping(
-            rpm = resolveChannel(chSet, RPM_ALIASES),
+            rpm = resolveChannel(chSet, RPM_ALIASES) ?: "",
             mapOrTps = resolveChannel(chSet, MAP_ALIASES) ?: resolveChannel(chSet, TPS_ALIASES) ?: "",
             afr = resolveChannel(chSet, AFR_ALIASES) ?: "",
             clt = resolveChannel(chSet, CLT_ALIASES) ?: "",
@@ -416,7 +416,7 @@ class VeAnalysisViewModel @Inject constructor(
             AnalysisMode.WUE -> TableRole.WARMUP_ENRICHMENT
             AnalysisMode.GAMMA_E -> TableRole.VE
         }
-        return definition?.tables?.firstOrNull { it.role == role }
+        return definition?.tables?.values?.firstOrNull { it.role == role }
     }
 
     private fun extractAxisBins(
@@ -428,7 +428,7 @@ class VeAnalysisViewModel @Inject constructor(
         val axisName = if (isXAxis) tableDef.xAxis?.binsName else tableDef.yAxis?.binsName
         val size = if (isXAxis) tableDef.cols else tableDef.rows
         if (axisName == null || tune == null) return (0 until size).map { it.toDouble() }
-        val axisDef = definition?.curves?.firstOrNull { it.name == axisName }
+        val axisDef = definition?.curves?.values?.firstOrNull { it.name == axisName }
         if (axisDef != null) {
             return tune.curveValues[axisName]?.take(size) ?: (0 until size).map { it.toDouble() }
         }

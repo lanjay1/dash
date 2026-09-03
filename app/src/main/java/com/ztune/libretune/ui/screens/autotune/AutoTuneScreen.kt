@@ -146,7 +146,7 @@ fun AutoTuneScreen(
 @Composable
 private fun SettingsPanel(
     settings: AutoTuneSettings,
-    onUpdate: (AutoTuneSettings) -> AutoTuneSettings,
+    onUpdate: ((AutoTuneSettings) -> AutoTuneSettings) -> Unit,
 ) {
     Card(
         modifier = Modifier
@@ -155,30 +155,30 @@ private fun SettingsPanel(
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Settings", style = MaterialTheme.typography.titleSmall)
-            LabeledSlider("Target AFR", settings.targetAfr, 9f, 22f) { onUpdate(it.copy(targetAfr = it.targetAfr + 0.1f * it.targetAfr)) }
-            LabeledSlider("Min RPM", settings.minRpm.toFloat(), 500f, 8000f) { onUpdate(it.copy(minRpm = it.toInt())) }
-            LabeledSlider("Max RPM", settings.maxRpm.toFloat(), 1000f, 10000f) { onUpdate(it.copy(maxRpm = it.toInt())) }
-            LabeledSlider("Min CLT °C", settings.minClt.toFloat(), 20f, 100f) { onUpdate(it.copy(minClt = it.toInt())) }
-            LabeledSlider("Max TPS Rate %/s", settings.maxTpsRate, 10f, 200f) { onUpdate(it.copy(maxTpsRate = it)) }
-            LabeledSlider("Authority %", settings.maxChangePct, 1f, 50f) { onUpdate(it.copy(maxChangePct = it)) }
-            LabeledSlider("Authority Abs", settings.maxChangeAbs, 1f, 20f) { onUpdate(it.copy(maxChangeAbs = it)) }
+            LabeledSlider("Target AFR", settings.targetAfr, 9f, 22f) { newValue -> onUpdate { it.copy(targetAfr = newValue) } }
+            LabeledSlider("Min RPM", settings.minRpm.toFloat(), 500f, 8000f) { newValue -> onUpdate { it.copy(minRpm = newValue.toInt()) } }
+            LabeledSlider("Max RPM", settings.maxRpm.toFloat(), 1000f, 10000f) { newValue -> onUpdate { it.copy(maxRpm = newValue.toInt()) } }
+            LabeledSlider("Min CLT °C", settings.minClt.toFloat(), 20f, 100f) { newValue -> onUpdate { it.copy(minClt = newValue.toInt()) } }
+            LabeledSlider("Max TPS Rate %/s", settings.maxTpsRate, 10f, 200f) { newValue -> onUpdate { it.copy(maxTpsRate = newValue) } }
+            LabeledSlider("Authority %", settings.maxChangePct, 1f, 50f) { newValue -> onUpdate { it.copy(maxChangePct = newValue) } }
+            LabeledSlider("Authority Abs", settings.maxChangeAbs, 1f, 20f) { newValue -> onUpdate { it.copy(maxChangeAbs = newValue) } }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Algorithm", modifier = Modifier.weight(1f))
                 Algorithm.entries.forEach { algo ->
                     FilterChip(
                         selected = settings.algorithm == algo,
-                        onClick = { onUpdate(settings.copy(algorithm = algo)) },
+                        onClick = { onUpdate { it.copy(algorithm = algo) } },
                         label = { Text(algo.label) },
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                 }
             }
-            LabeledSlider("Delay ms", settings.lambdaDelayMs.toFloat(), 0f, 500f) { onUpdate(it.copy(lambdaDelayMs = it.toLong())) }
-            LabeledSlider("Min Samples", settings.minCellSamples.toFloat(), 1f, 50f) { onUpdate(it.copy(minCellSamples = it.toInt())) }
-            LabeledSlider("Smoothing", settings.smoothingPasses.toFloat(), 0f, 10f) { onUpdate(it.copy(smoothingPasses = it.toInt())) }
+            LabeledSlider("Delay ms", settings.lambdaDelayMs.toFloat(), 0f, 500f) { newValue -> onUpdate { it.copy(lambdaDelayMs = newValue.toLong()) } }
+            LabeledSlider("Min Samples", settings.minCellSamples.toFloat(), 1f, 50f) { newValue -> onUpdate { it.copy(minCellSamples = newValue.toInt()) } }
+            LabeledSlider("Smoothing", settings.smoothingPasses.toFloat(), 0f, 10f) { newValue -> onUpdate { it.copy(smoothingPasses = newValue.toInt()) } }
             OutlinedTextField(
                 value = settings.customExpression,
-                onValueChange = { onUpdate(settings.copy(customExpression = it)) },
+                onValueChange = { newValue -> onUpdate { it.copy(customExpression = newValue) } },
                 label = { Text("Custom Filter Expr") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
@@ -294,17 +294,21 @@ private fun VeTableGrid(
                 Text("${col}", fontSize = 8.sp, fontFamily = FontFamily.Monospace)
             }
         }
-        items(rows) { row ->
-            item {
+        // Each row contributes 1 label cell + `cols` data cells.
+        items(rows * (cols + 1)) { idx ->
+            val row = idx / (cols + 1)
+            val col = idx % (cols + 1)
+            if (col == 0) {
+                // Row label cell
                 Box(
                     modifier = Modifier.size(32.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     Text("${row}", fontSize = 8.sp, fontFamily = FontFamily.Monospace)
                 }
-            }
-            items(cols) { col ->
-                val key = row to col
+            } else {
+                val actualCol = col - 1
+                val key = row to actualCol
                 val value = heatmapData[key]
                 val stat = cellStats[key]
                 val locked = lockedCells.contains(key)
@@ -318,8 +322,8 @@ private fun VeTableGrid(
                     modifier = Modifier
                         .size(32.dp)
                         .combinedClickable(
-                            onClick = { onCellTap(row, col) },
-                            onLongClick = { onCellLongPress(row, col) },
+                            onClick = { onCellTap(row, actualCol) },
+                            onLongClick = { onCellLongPress(row, actualCol) },
                         )
                         .background(bgColor)
                         .then(

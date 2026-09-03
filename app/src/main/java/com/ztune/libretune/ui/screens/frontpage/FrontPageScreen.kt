@@ -93,15 +93,20 @@ fun FrontPageScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = {
-                Text(
-                    "ZTune",
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 2.sp
-                )
-            },
-            subtitle = {
-                val sig = connectionState.signature ?: "No ECU"
-                Text(sig, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Column {
+                    Text(
+                        "ZTune",
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 2.sp
+                    )
+                    val sig = connectionState.signature ?: "No ECU"
+                    Text(
+                        sig,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             },
             actions = {
                 StatusDot(isLive = isLive, status = connectionState.status)
@@ -236,7 +241,8 @@ private fun QuickActionChip(icon: ImageVector, label: String, onClick: () -> Uni
 @Composable
 private fun LiveGaugeStrip(channelStore: RealtimeChannelStore) {
     // Observe channels to trigger recomposition on every update
-    val _ = channelStore.channels.collectAsState()
+    @Suppress("UNUSED_VARIABLE")
+    val channelState = channelStore.channels.collectAsState()
     Row(
         modifier = Modifier
             .fillMaxWidth()

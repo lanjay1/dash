@@ -109,7 +109,7 @@ private fun HorizontalBarContent(
     onSurfaceVariant: Color
 ) {
     val range = config.max - config.min
-    val fraction = if (range != 0.0) ((value - config.min) / range).coerceIn(0.0, 1.0) else 0f
+    val fraction = if (range != 0.0) ((value - config.min) / range).toFloat().coerceIn(0f, 1f) else 0f
     val animatedFraction by animateFloatAsState(
         targetValue = fraction,
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 150)
@@ -218,7 +218,7 @@ private fun VerticalBarContent(
     onSurfaceVariant: Color
 ) {
     val range = config.max - config.min
-    val fraction = if (range != 0.0) ((value - config.min) / range).coerceIn(0.0, 1.0) else 0f
+    val fraction = if (range != 0.0) ((value - config.min) / range).toFloat().coerceIn(0f, 1f) else 0f
     val animatedFraction by animateFloatAsState(
         targetValue = fraction,
         animationSpec = androidx.compose.animation.core.tween(durationMillis = 150)

@@ -3,13 +3,16 @@ package com.ztune.libretune.ui.navigation
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -17,6 +20,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -35,6 +39,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.findStartDestination
 import androidx.navigation.navArgument
 import com.ztune.libretune.R
 import com.ztune.libretune.ui.screens.HomeScreen
@@ -97,7 +102,8 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
 
     // Observe whether an ECU definition has been loaded.
     val menuTreeVm: MenuTreeViewModel = hiltViewModel()
-    val hasDefinition by menuTreeVm.definitionLoaded.collectAsState()
+    val menuTree by menuTreeVm.menuTree.collectAsState()
+    val hasDefinition = menuTree.isNotEmpty()
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
@@ -113,7 +119,8 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
         drawerContent = {
             if (hasDefinition && showChrome) {
                 ModalDrawerSheet(modifier = Modifier.width(280.dp)) {
-                    MenuTree(
+                    MenuTreeDrawer(
+                        menuItems = menuTree,
                         onNavigate = { route ->
                             scope.launch { drawerState.close() }
                             navController.navigate(route)
@@ -206,7 +213,7 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
                     arguments = listOf(navArgument("name") { type = NavType.StringType })
                 ) { backStack ->
                     val name = backStack.arguments?.getString("name").orEmpty()
-                    TableEditorScreen(name = name)
+                    TableEditorScreen(tableName = name)
                 }
 
                 // -- Curve editor ---------------------------------------------------
@@ -295,8 +302,55 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
 /** Navigate to a top-level destination with proper back-stack behaviour. */
 private fun NavHostController.navigateToTopLevel(route: String) {
     navigate(route) {
-        popUpTo(graph.findStartDestination().id) { saveState = true }
+        popUpTo(graph.findStartDestination().id) {
+            saveState = true
+        }
         launchSingleTop = true
         restoreState = true
+    }
+}
+
+/**
+ * Simple drawer that renders the menu tree as a flat list of navigation entries.
+ *
+ * Replaces the previously-missing `MenuTree` composable with a minimal
+ * implementation that shows top-level menu items and their first-level
+ * children, navigating to the appropriate route on tap.
+ */
+@Composable
+private fun MenuTreeDrawer(
+    menuItems: List<MenuItemUi>,
+    onNavigate: (String) -> Unit,
+    currentRoute: String?
+) {
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Text(
+            text = "Menu",
+            modifier = Modifier.padding(16.dp),
+            style = MaterialTheme.typography.titleMedium
+        )
+        HorizontalDivider()
+        menuItems.forEach { item ->
+            NavigationDrawerItem(
+                label = { Text(item.label) },
+                selected = currentRoute == item.targetName,
+                icon = { Icon(item.icon, contentDescription = null) },
+                onClick = { onNavigate(item.targetName) },
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+            if (item.children.isNotEmpty()) {
+                item.children.take(8).forEach { child ->
+                    NavigationDrawerItem(
+                        label = { Text("  ${child.label}", style = MaterialTheme.typography.bodyMedium) },
+                        selected = currentRoute == child.targetName,
+                        icon = { Icon(child.icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        onClick = { onNavigate(child.targetName) },
+                        modifier = Modifier.padding(start = 16.dp).padding(horizontal = 8.dp)
+                    )
+                }
+            }
+        }
     }
 }

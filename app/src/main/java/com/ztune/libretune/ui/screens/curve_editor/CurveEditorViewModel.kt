@@ -45,10 +45,19 @@ class CurveEditorViewModel(
     private fun loadCurveData() {
         val def = definition ?: return
         val curve = def.getCurveByNameOrMap(curveName) ?: return
-        val pageData = tune?.getPageData(curve.page)
-        val xBins = if (pageData != null && def != null) {
-            val decoder = com.ztune.libretune.core.realtime.RealtimeDecoder(def)
-            decoder.decodeTableAxis(pageData, curve.xAxis)
+        val pageData = tune?.getPageData(curve.binsPage)
+        val xBins = if (pageData != null) {
+            // Decode the curve's bins (X axis) directly from binsOffset.
+            val reader = com.ztune.libretune.core.tune.ByteOrderReader(pageData, def.endianness)
+            (0 until curve.size).map { i ->
+                try {
+                    val offset = curve.binsOffset + i * curve.dataType.byteSize
+                    val raw = reader.readValueAt(offset, curve.dataType) ?: 0.0
+                    raw * curve.scale + curve.translate
+                } catch (e: Exception) {
+                    0.0
+                }
+            }
         } else {
             (0 until curve.size).map { it.toDouble() * 100.0 / maxOf(curve.size - 1, 1) }
         }
@@ -58,9 +67,9 @@ class CurveEditorViewModel(
             title = curve.name.ifEmpty { curveName },
             xBins = xBins,
             yBins = yBins,
-            xLabel = curve.xAxis?.units ?: "X",
+            xLabel = curve.units.ifEmpty { "X" },
             yLabel = curve.units,
-            xOutputChannel = curve.xOutputChannel
+            xOutputChannel = null
         )
     }
 
@@ -92,8 +101,8 @@ class CurveEditorViewModel(
     fun setPointByDrag(position: Offset, chartBounds: androidx.compose.ui.geometry.Rect) {
         val st = _state.value
         if (st.xBins.isEmpty()) return
-        val xRatio = ((position.x - chartBounds.left) / chartBounds.width).coerceIn(0.0, 1.0)
-        val yRatio = 1.0 - ((position.y - chartBounds.top) / chartBounds.height).coerceIn(0.0, 1.0)
+        val xRatio = ((position.x - chartBounds.left).toDouble() / chartBounds.width.toDouble()).coerceIn(0.0, 1.0)
+        val yRatio = 1.0 - ((position.y - chartBounds.top).toDouble() / chartBounds.height.toDouble()).coerceIn(0.0, 1.0)
         val targetX = st.xBins.first() + xRatio * (st.xBins.last() - st.xBins.first())
         var closestIdx = 0
         var minDist = Double.MAX_VALUE

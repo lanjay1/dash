@@ -233,42 +233,42 @@ fun VeAnalysisScreen(
                                 "Target AFR",
                                 state.params.targetAfr,
                                 9f, 22f,
-                            ) { viewModel.updateParams { it.copy(targetAfr = it) } }
+                            ) { newValue -> viewModel.updateParams { it.copy(targetAfr = newValue) } }
                             ParamSlider(
                                 "Min Change %",
                                 state.params.minChangePct,
                                 0f, 5f,
-                            ) { viewModel.updateParams { it.copy(minChangePct = it) } }
+                            ) { newValue -> viewModel.updateParams { it.copy(minChangePct = newValue) } }
                             ParamSlider(
                                 "Min Steady ms",
                                 state.params.minSteadyMs.toFloat(),
                                 0f, 2000f,
-                            ) { viewModel.updateParams { it.copy(minSteadyMs = it.toLong()) } }
+                            ) { newValue -> viewModel.updateParams { it.copy(minSteadyMs = newValue.toLong()) } }
                             ParamSlider(
                                 "CLT Threshold °C",
                                 state.params.cltThreshold.toFloat(),
                                 20f, 100f,
-                            ) { viewModel.updateParams { it.copy(cltThreshold = it.toInt()) } }
+                            ) { newValue -> viewModel.updateParams { it.copy(cltThreshold = newValue.toInt()) } }
                             ParamSlider(
                                 "TPS Rate Thresh",
                                 state.params.tpsRateThreshold,
                                 10f, 300f,
-                            ) { viewModel.updateParams { it.copy(tpsRateThreshold = it) } }
+                            ) { newValue -> viewModel.updateParams { it.copy(tpsRateThreshold = newValue) } }
                             ParamSlider(
                                 "Max Change %",
                                 state.params.maxChangePct,
                                 1f, 30f,
-                            ) { viewModel.updateParams { it.copy(maxChangePct = it) } }
+                            ) { newValue -> viewModel.updateParams { it.copy(maxChangePct = newValue) } }
                             ParamSlider(
                                 "Smoothing Passes",
                                 state.params.smoothingPasses.toFloat(),
                                 0f, 8f,
-                            ) { viewModel.updateParams { it.copy(smoothingPasses = it.toInt()) } }
+                            ) { newValue -> viewModel.updateParams { it.copy(smoothingPasses = newValue.toInt()) } }
                             ParamSlider(
                                 "AFR Tolerance",
                                 state.params.afrTolerance,
                                 0.5f, 5f,
-                            ) { viewModel.updateParams { it.copy(afrTolerance = it) } }
+                            ) { newValue -> viewModel.updateParams { it.copy(afrTolerance = newValue) } }
                         }
                     }
                 }
@@ -455,12 +455,13 @@ fun VeAnalysisScreen(
             }
 
             // Cell detail popup
-            if (showCellPopup && state.selectedCell != null && state.results != null) {
-                val cell = state.results.cellMap[state.selectedCell]
+            val currentResults = state.results
+            if (showCellPopup && state.selectedCell != null && currentResults != null) {
+                val cell = currentResults.cellMap[state.selectedCell]
                 if (cell != null) {
                     CellDetailDialog(
                         cell = cell,
-                        coverageHits = state.results.coverageMap[state.selectedCell] ?: 0,
+                        coverageHits = currentResults.coverageMap[state.selectedCell] ?: 0,
                         onDismiss = {
                             showCellPopup = false
                             viewModel.clearSelection()
@@ -656,11 +657,11 @@ private fun VeProposedGridView(
                                 (cell.delta.coerceIn(0f, 5f) / 5f * 0x4CAF50.toInt()).toInt()
                         ).let {
                             val alpha = (cell.delta.coerceIn(0f, 5f) / 5f)
-                            Color.lerp(Color(0xFFE8F5E9), Color(0xFF2E7D32), alpha)
+                            androidx.compose.ui.graphics.lerp(Color(0xFFE8F5E9), Color(0xFF2E7D32), alpha)
                         }
                         cell.delta < 0 -> {
                             val alpha = (cell.delta.coerceIn(-5f, 0f) / -5f)
-                            Color.lerp(Color(0xFFFFEBEE), Color(0xFFC62828), alpha)
+                            androidx.compose.ui.graphics.lerp(Color(0xFFFFEBEE), Color(0xFFC62828), alpha)
                         }
                         else -> Color(0xFFF5F5F5)
                     }
@@ -744,7 +745,7 @@ private fun CoverageGridView(
                     val bgColor = if (hits == 0) {
                         Color(0xFFECEFF1)
                     } else {
-                        Color.lerp(Color(0xFFFFF9C4), Color(0xFFE65100), intensity)
+                        androidx.compose.ui.graphics.lerp(Color(0xFFFFF9C4), Color(0xFFE65100), intensity)
                     }
                     Box(
                         modifier = Modifier

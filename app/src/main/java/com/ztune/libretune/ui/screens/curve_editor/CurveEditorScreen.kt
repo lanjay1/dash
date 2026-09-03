@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -162,8 +163,8 @@ private fun ChartCanvas(
                 drawLine(GridColor, Offset(left, y), Offset(right, y), strokeWidth = 1f)
                 val labelVal = yMax - (yRange * i / gridLines)
                 val text = "%.1f".format(labelVal)
-                val measured = textMeasurer.measure(text, fontSize = 10.sp)
-                drawText(measured, color = Color.Gray, topLeft = Offset(2f, y - measured.size.height / 2))
+                val measured = textMeasurer.measure(text, style = TextStyle(fontSize = 10.sp))
+                drawText(measured, color = Color.Gray, topLeft = Offset(2f, y - measured.size.height / 2f))
             }
 
             val xTickStep = maxOf(1, xBins.size / 6)
@@ -172,7 +173,7 @@ private fun ChartCanvas(
                 val x = left + (xFrac * width).toFloat()
                 drawLine(GridColor, Offset(x, top), Offset(x, bottom), strokeWidth = 1f)
                 val text = "%.0f".format(xBins[i])
-                val measured = textMeasurer.measure(text, fontSize = 10.sp)
+                val measured = textMeasurer.measure(text, style = TextStyle(fontSize = 10.sp))
                 drawText(
                     measured, color = Color.Gray,
                     topLeft = Offset(x - measured.size.width / 2f, bottom + 6f)

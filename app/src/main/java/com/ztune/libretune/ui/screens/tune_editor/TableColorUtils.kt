@@ -39,10 +39,10 @@ object TableColorUtils {
         return when {
             t <= 0.5 -> {
                 // Blue → Green
-                val localT = t / 0.5 // 0..1 within the first half
+                val localT = (t / 0.5).toFloat() // 0..1 within the first half
                 val red = 0f
-                val green = (200f * localT)
-                val blue = (255f * (1f - localT))
+                val green = 200f * localT
+                val blue = 255f * (1f - localT)
                 Color(
                     red = red,
                     green = green,
@@ -52,7 +52,7 @@ object TableColorUtils {
             }
             else -> {
                 // Green → Red
-                val localT = (t - 0.5) / 0.5 // 0..1 within the second half
+                val localT = ((t - 0.5) / 0.5).toFloat() // 0..1 within the second half
                 val red = 255f * localT
                 val green = 200f * (1f - localT)
                 val blue = 0f

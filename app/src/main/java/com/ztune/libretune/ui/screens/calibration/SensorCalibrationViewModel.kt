@@ -160,8 +160,7 @@ class SensorCalibrationViewModel(
                 for ((i, val_) in st.newValues.withIndex()) {
                     val offset = rt.valuesOffset + i * 2 // Assume U16
                     val rawVal = (val_ * 10).toInt().toShort()
-                    writer.setPosition(offset)
-                    writer.writeValue(com.ztune.libretune.core.ini.types.DataType.U16, rawVal.toDouble())
+                    writer.writeValueAt(offset, com.ztune.libretune.core.ini.types.DataType.U16, rawVal.toDouble())
                 }
 
                 val newData = writer.toByteArray()

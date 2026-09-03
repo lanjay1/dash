@@ -22,11 +22,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.drawLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.input.pointer.awaitEachGesture
-import androidx.compose.ui.input.pointer.awaitFirstDown
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
@@ -149,7 +152,7 @@ fun DatalogChartScreen(
                     }
                     if (state.crosshairTime != null) {
                         CrosshairInfo(
-                            time = state.crosshairTime,
+                            time = state.crosshairTime!!,
                             values = state.crosshairValues,
                             selectedChannels = state.selectedChannels,
                             channelNames = state.channelNames,
@@ -253,7 +256,7 @@ private fun DatalogChart(
                             val span = (c0 - c1).getDistance()
                             if (prevSpan > 0f && span > 0f) {
                                 val cx = (c0.x + c1.x) / 2f
-                                viewModel.handleZoom(cx / size.width, span / prevSpan)
+                                viewModel.handleZoom(cx / size.width.toFloat(), span / prevSpan)
                             }
                             prevSpan = span
                             prevX = (c0.x + c1.x) / 2f
@@ -261,15 +264,15 @@ private fun DatalogChart(
                             val cur = changes[0].position
                             val dx = cur.x - prevX
                             if (abs(dx) > 2f) {
-                                viewModel.handlePan(dx, size.width)
+                                viewModel.handlePan(dx, size.width.toFloat())
                                 moved = true
                             }
                             prevX = cur.x
                         }
                         changes.forEach { it.consume() }
-                    } while (changes.any { it.pressed })
+                    } while (changes.any { it.isPressed })
                     if (!moved) {
-                        viewModel.updateCrosshair(down.position.x / size.width)
+                        viewModel.updateCrosshair(down.position.x / size.width.toFloat())
                     }
                 }
             },

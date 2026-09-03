@@ -16,7 +16,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCut
-import androidx.compose.material.icons.filled.HistoryRestore
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -176,7 +176,7 @@ private fun CommitCard(
             )
             Spacer(modifier = Modifier.height(8.dp))
             TextButton(onClick = onRestore) {
-                Icon(Icons.Default.HistoryRestore, contentDescription = null, modifier = Modifier.height(16.dp))
+                Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.height(16.dp))
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Restore this version")
             }

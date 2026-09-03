@@ -37,13 +37,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.ztune.libretune.core.ecu.ToothLoggerTransport
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -146,9 +151,10 @@ private fun ToothTimingDiagram(
     events: List<ToothLoggerTransport.ToothEvent>,
     modifier: Modifier = Modifier,
 ) {
+    val textMeasurer = rememberTextMeasurer()
     androidx.compose.foundation.Canvas(modifier = modifier) {
         if (events.isEmpty()) {
-            drawCenteredPlaceholder("No data captured")
+            drawCenteredPlaceholder("No data captured", textMeasurer)
             return@Canvas
         }
 
@@ -186,13 +192,12 @@ private fun ToothTimingDiagram(
         }
 
         // Axis labels
-        drawAxisLabels()
+        drawAxisLabels(textMeasurer)
     }
 }
 
-private fun DrawScope.drawCenteredPlaceholder(text: String) {
-    val textMeasurer = androidx.compose.ui.text.TextMeasurer()
-    val measured = textMeasurer.measure(text)
+private fun DrawScope.drawCenteredPlaceholder(text: String, textMeasurer: TextMeasurer) {
+    val measured = textMeasurer.measure(text, TextStyle(fontSize = 10.sp))
     drawText(
         textLayoutResult = measured,
         color = Color.Gray.copy(alpha = 0.6f),
@@ -217,11 +222,10 @@ private fun DrawScope.drawGrid(maxTime: Float) {
     }
 }
 
-private fun DrawScope.drawAxisLabels() {
+private fun DrawScope.drawAxisLabels(textMeasurer: TextMeasurer) {
     val labelColor = Color.Gray.copy(alpha = 0.7f)
-    val textMeasurer = androidx.compose.ui.text.TextMeasurer()
-    val primaryLabel = textMeasurer.measure("PRI", androidx.compose.ui.text.TextStyle(fontSize = 10.sp))
-    val secLabel = textMeasurer.measure("SEC", androidx.compose.ui.text.TextStyle(fontSize = 10.sp))
+    val primaryLabel = textMeasurer.measure("PRI", TextStyle(fontSize = 10.sp))
+    val secLabel = textMeasurer.measure("SEC", TextStyle(fontSize = 10.sp))
     drawText(textLayoutResult = primaryLabel, color = labelColor, topLeft = Offset(4f, 4f))
     drawText(
         textLayoutResult = secLabel,

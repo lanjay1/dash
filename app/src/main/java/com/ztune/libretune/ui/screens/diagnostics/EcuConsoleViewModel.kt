@@ -29,7 +29,7 @@ class EcuConsoleViewModel @Inject constructor(
     private val _outputLines = MutableStateFlow<List<ConsoleOutputLine>>(emptyList())
     val outputLines: StateFlow<List<ConsoleOutputLine>> = _outputLines.asStateFlow()
 
-    private val commandHistory = ArrayDeque<String>(capacity = 64)
+    private val commandHistory = ArrayDeque<String>(64)
     private var lineIdCounter = 0L
 
     /**

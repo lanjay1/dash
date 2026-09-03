@@ -741,40 +741,42 @@ private class EvalContext(
     private val variables: Map<String, Double>,
     private val functions: Map<String, FunctionCallHandler>?,
 ) {
-    fun eval(e: Expr): ExprResult<Double> = when (e) {
-        is Expr.Number -> ok(e.value)
+    fun eval(e: Expr): ExprResult<Double> {
+        return when (e) {
+            is Expr.Number -> ok(e.value)
 
-        is Expr.Var -> {
-            val v = variables[e.name]
-            if (v != null) ok(v)
-            else err("Undefined variable '${e.name}'")
-        }
-
-        is Expr.Unary -> {
-            val operand = eval(e.operand)
-            if (operand.isFailure) return operand
-            val v = operand.getOrNull()!!
-            when (e.op) {
-                UnaryOp.NEG -> ok(-v)
-                UnaryOp.NOT -> ok(if (v != 0.0) 0.0 else 1.0)
-                UnaryOp.BIT_NOT -> ok((v.toLong().inv()).toDouble())
+            is Expr.Var -> {
+                val v = variables[e.name]
+                if (v != null) ok(v)
+                else err("Undefined variable '${e.name}'")
             }
-        }
 
-        is Expr.Binary -> evalBinary(e)
+            is Expr.Unary -> {
+                val operand = eval(e.operand)
+                if (operand.isFailure) return operand
+                val v = operand.getOrNull()!!
+                when (e.op) {
+                    UnaryOp.NEG -> ok(-v)
+                    UnaryOp.NOT -> ok(if (v != 0.0) 0.0 else 1.0)
+                    UnaryOp.BIT_NOT -> ok((v.toLong().inv()).toDouble())
+                }
+            }
 
-        is Expr.Ternary -> {
-            val cond = eval(e.condition)
-            if (cond.isFailure) return cond
-            if (cond.getOrNull()!! != 0.0) eval(e.trueExpr) else eval(e.falseExpr)
-        }
+            is Expr.Binary -> evalBinary(e)
 
-        is Expr.FuncCall -> evalFunction(e.name, e.args)
+            is Expr.Ternary -> {
+                val cond = eval(e.condition)
+                if (cond.isFailure) return cond
+                if (cond.getOrNull()!! != 0.0) eval(e.trueExpr) else eval(e.falseExpr)
+            }
 
-        is Expr.BitStringValue -> {
-            // BitStringValue resolution happens at INI parse time;
-            // return 0.0 as a placeholder.
-            ok(0.0)
+            is Expr.FuncCall -> evalFunction(e.name, e.args)
+
+            is Expr.BitStringValue -> {
+                // BitStringValue resolution happens at INI parse time;
+                // return 0.0 as a placeholder.
+                ok(0.0)
+            }
         }
     }
 

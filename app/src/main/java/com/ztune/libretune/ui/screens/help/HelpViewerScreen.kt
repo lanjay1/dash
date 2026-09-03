@@ -94,10 +94,10 @@ fun HelpViewerScreen(
                     is MarkdownBlock.Bullet -> {
                         Text(
                             text = renderInlineFormatting(block.text),
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 2.dp),
-                            textIndent = TextIndent(restLine = 16.dp, firstLine = 0.sp),
-                            bulletListType = BulletListType()
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                textIndent = TextIndent(restLine = 16.sp, firstLine = 0.sp)
+                            ),
+                            modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 2.dp)
                         )
                     }
                     is MarkdownBlock.Paragraph -> {

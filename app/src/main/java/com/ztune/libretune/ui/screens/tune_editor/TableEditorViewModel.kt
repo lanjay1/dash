@@ -87,8 +87,8 @@ class TableEditorViewModel @Inject constructor(
         if (tbl == null) { loadDemoTable(name); return }
         definition = def
         tableDef = tbl
-        xOutputChannel = tbl.xOutputChannel
-        yOutputChannel = tbl.yOutputChannel
+        xOutputChannel = null
+        yOutputChannel = null
         val tune = tuneManager.currentTune
         val pageData = tune?.getPageData(tbl.page)
         val decoder = com.ztune.libretune.core.realtime.RealtimeDecoder(def)
@@ -149,7 +149,7 @@ class TableEditorViewModel @Inject constructor(
         val cells = getSelectedCells() ?: return
         pushUndo()
         val mutable = toMutableValues()
-        TableOperations.scaleCells(cells.map { it.first to it.second }, mutable, factor)
+        TableOperations.scaleCells(cells, factor, mutable)
         applyValues(mutable)
     }
 
@@ -166,7 +166,11 @@ class TableEditorViewModel @Inject constructor(
         pushUndo()
         val mutable = toMutableValues()
         TableOperations.interpolateCells(
-            (0 until st.rows).flatMap { r -> (0 until st.cols).map { c -> r to c } }, mutable, st.rows, st.cols
+            table = mutable,
+            selectedCells = (0 until st.rows).flatMap { r -> (0 until st.cols).map { c -> r to c } },
+            values = st.values,
+            rows = st.rows,
+            cols = st.cols
         )
         applyValues(mutable)
     }
@@ -175,7 +179,7 @@ class TableEditorViewModel @Inject constructor(
         val cells = getSelectedCells() ?: return
         pushUndo()
         val mutable = toMutableValues()
-        TableOperations.setCellsEqual(cells.map { it.first to it.second }, mutable, mutable)
+        TableOperations.setCellsEqual(cells, emptyList(), mutable)
         applyValues(mutable)
     }
 
@@ -183,7 +187,7 @@ class TableEditorViewModel @Inject constructor(
         val cells = getSelectedCells() ?: return
         pushUndo()
         val mutable = toMutableValues()
-        TableOperations.addOffset(cells.map { it.first to it.second }, mutable, offset)
+        TableOperations.addOffset(cells, offset, mutable)
         applyValues(mutable)
     }
 
@@ -213,10 +217,9 @@ class TableEditorViewModel @Inject constructor(
         }
     }
 
-    private fun getSelectedCells(): List<Pair<Int, Double>>? {
+    private fun getSelectedCells(): List<Pair<Int, Int>>? {
         val cell = _uiState.value.selectedCell ?: return null
-        val val_ = _uiState.value.values[cell.first][cell.second]
-        return listOf(cell.first to val_)
+        return listOf(cell)
     }
 
     private fun pushUndo() {

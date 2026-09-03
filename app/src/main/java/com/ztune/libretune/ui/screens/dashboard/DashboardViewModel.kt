@@ -330,6 +330,7 @@ class DashboardViewModel @Inject constructor(
         com.ztune.libretune.core.EcuConnectionStatus.CONNECTED ->
             transportName?.let { "Connected · $it" } ?: "Connected"
         com.ztune.libretune.core.EcuConnectionStatus.RECONNECTING -> "Reconnecting…"
+        com.ztune.libretune.core.EcuConnectionStatus.SYNCING -> "Syncing…"
         com.ztune.libretune.core.EcuConnectionStatus.ERROR -> "Connection Error"
     }
 
