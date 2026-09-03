@@ -94,13 +94,13 @@ class MenuTreeViewModel(
         MenuNodeType.DIALOG -> Icons.Outlined.Settings
         MenuNodeType.DASHBOARD -> Icons.Outlined.Dashboard
         MenuNodeType.LOG -> Icons.Outlined.BarChart
-        MenuNodeType.HELP -> Icons.Outlined.Help
+        MenuNodeType.HELP -> Icons.AutoMirrored.Outlined.Help
         MenuNodeType.INDICATOR -> Icons.Outlined.Lightbulb
         MenuNodeType.READOUT -> Icons.Outlined.Speed
         MenuNodeType.COMMAND -> Icons.Outlined.Terminal
-        MenuNodeType.CALIBRATION -> Icons.Outlined.ShowChart
+        MenuNodeType.CALIBRATION -> Icons.AutoMirrored.Outlined.ShowChart
         MenuNodeType.PORT_EDITOR -> Icons.Outlined.DeveloperBoard
-        MenuNodeType.CURVE -> Icons.Outlined.ShowChart
+        MenuNodeType.CURVE -> Icons.AutoMirrored.Outlined.ShowChart
     }
 
     private fun buildTree(definition: EcuDefinition) {

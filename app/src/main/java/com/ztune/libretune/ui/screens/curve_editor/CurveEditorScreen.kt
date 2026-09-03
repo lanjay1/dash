@@ -10,8 +10,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Redo
-import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.automirrored.filled.Redo
+import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -68,10 +68,10 @@ fun CurveEditorScreen(
                 },
                 actions = {
                     IconButton(onClick = { viewModel.undo() }, enabled = viewModel.canUndo()) {
-                        Icon(Icons.Filled.Undo, contentDescription = "Undo")
+                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Undo")
                     }
                     IconButton(onClick = { viewModel.redo() }, enabled = viewModel.canRedo()) {
-                        Icon(Icons.Filled.Redo, contentDescription = "Redo")
+                        Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Redo")
                     }
                 }
             )

@@ -64,26 +64,19 @@ object AppModule {
     }
 
     /**
-     * Provide a default (empty) [EcuDefinition] so the Hilt DI graph can be
-     * resolved at compile time.
-     *
-     * The real, ECU-specific definition is owned by [EcuConnectionManager]
-     * (via its public `activeDefinition` field) and gets swapped in once an
-     * ECU is connected. Singleton-scoped here so any singleton manager
-     * (e.g. [TuneManager]) that depends on it can be constructed without a
-     * live ECU; managers that need the up-to-date definition should read
-     * it from [EcuConnectionManager.activeDefinition] at call time.
-     */
-    @Provides
-    @Singleton
-    fun provideDefaultEcuDefinition(): EcuDefinition = EcuDefinition.default()
-
-    /**
-     * Provide [RealtimeDecoder] bound to the default [EcuDefinition].
+     * Provide a singleton [RealtimeDecoder] bound to a default (empty) [EcuDefinition].
      *
      * The decoder is intrinsically per-connection (it depends on the active
-     * [EcuDefinition]); this provider is only used to satisfy compile-time
-     * DI graph resolution for singleton consumers like [TuneManager].
+     * [EcuDefinition]); this provider only satisfies compile-time DI graph
+     * resolution for singleton consumers like [TuneManager].
+     *
+     * IMPORTANT: We deliberately inline the `EcuDefinition.default()` call
+     * here instead of exposing it as a separate `@Provides` method.
+     * Exposing `EcuDefinition` as a Hilt binding caused a
+     * `Dagger/MissingBinding` error in `:app:hiltJavaCompileDebug` because
+     * Hilt's component scanner failed to pick up the standalone provider
+     * (likely a KSP caching quirk). Inlining the construction side-steps
+     * that issue entirely.
      *
      * Callers that need a decoder for the *current* ECU connection should
      * construct one explicitly via `RealtimeDecoder(connectionManager
@@ -91,8 +84,8 @@ object AppModule {
      */
     @Provides
     @Singleton
-    fun provideRealtimeDecoder(definition: EcuDefinition): RealtimeDecoder {
-        return RealtimeDecoder(definition)
+    fun provideRealtimeDecoder(): RealtimeDecoder {
+        return RealtimeDecoder(EcuDefinition.default())
     }
 
     // ------------------------------------------------------------------

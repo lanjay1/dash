@@ -118,7 +118,7 @@ class EcuConnectionManager(
                     channelStore.updateChannels(decoded)
 
                     if (dataLogManager.recordingState.value == DataLogRecordingState.RECORDING) {
-                        dataLogManager.onRealtimeUpdate(RealtimeUpdate(System.currentTimeMillis(), rawData, decoded))
+                        dataLogManager.onRealtimeUpdate(decoded)
                     }
                     autoTuneController?.let { ctrl ->
                         if (ctrl.state.value.isRunning) ctrl.feedSample(decoded)
