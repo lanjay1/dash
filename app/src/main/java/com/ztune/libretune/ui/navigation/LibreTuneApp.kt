@@ -39,7 +39,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.findStartDestination
 import androidx.navigation.navArgument
 import com.ztune.libretune.R
 import com.ztune.libretune.ui.screens.HomeScreen
@@ -303,13 +302,16 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
 
 /** Navigate to a top-level destination with proper back-stack behaviour. */
 private fun NavHostController.navigateToTopLevel(route: String) {
-    navigate(route) {
-        popUpTo(graph.findStartDestination().id) {
-            saveState = true
-        }
-        launchSingleTop = true
-        restoreState = true
-    }
+    // Build NavOptions manually so we don't depend on the `findStartDestination()`
+    // extension (not transitively pulled in via navigation-compose 2.8.4) and we
+    // avoid the private `saveState` setter inside the trailing-lambda DSL.
+    val startDestId = graph.startDestinationId
+    val options = androidx.navigation.NavOptions.Builder()
+        .setPopUpTo(startDestId, inclusive = false, saveState = true)
+        .setLaunchSingleTop(true)
+        .setRestoreState(true)
+        .build()
+    navigate(route, options)
 }
 
 /**
