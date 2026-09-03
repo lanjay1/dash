@@ -28,11 +28,11 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -101,7 +101,9 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
     val currentRoute = backStackEntry?.destination?.route
 
     // Observe whether an ECU definition has been loaded.
-    val menuTreeVm: MenuTreeViewModel = hiltViewModel()
+    // MenuTreeViewModel is a plain ViewModel (not @HiltViewModel) because
+    // EcuDefinition is a runtime-discovered value, not a Hilt-provided singleton.
+    val menuTreeVm: MenuTreeViewModel = remember { MenuTreeViewModel() }
     val menuTree by menuTreeVm.menuTree.collectAsState()
     val hasDefinition = menuTree.isNotEmpty()
 

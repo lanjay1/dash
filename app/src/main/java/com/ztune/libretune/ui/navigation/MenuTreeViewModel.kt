@@ -1,15 +1,15 @@
 package com.ztune.libretune.ui.navigation
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Help
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.BarChart
 import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.DeveloperBoard
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.GridView
-import androidx.compose.material.icons.outlined.Help
 import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -17,12 +17,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ztune.libretune.core.ini.EcuDefinition
 import com.ztune.libretune.core.ini.types.Menu
-import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
-import javax.inject.Inject
 
 enum class MenuNodeType {
     FOLDER,
@@ -50,9 +48,14 @@ data class MenuItemUi(
     val disabledReason: String? = null
 )
 
-@HiltViewModel
-class MenuTreeViewModel @Inject constructor(
-    definition: EcuDefinition
+/**
+ * Plain (non-Hilt) ViewModel that builds a UI menu tree from an [EcuDefinition].
+ *
+ * Construct it directly via the primary constructor; pass an empty / default
+ * [EcuDefinition] when no ECU is loaded yet.
+ */
+class MenuTreeViewModel(
+    definition: EcuDefinition? = null
 ) : ViewModel() {
 
     private val _menuTree = MutableStateFlow<List<MenuItemUi>>(emptyList())
@@ -74,7 +77,8 @@ class MenuTreeViewModel @Inject constructor(
     private val searchableIndex = mutableMapOf<String, MenuItemUi>()
 
     init {
-        if (definition.tables.isNotEmpty() || definition.menus.isNotEmpty()) {
+        if (definition != null &&
+            (definition.tables.isNotEmpty() || definition.menus.isNotEmpty())) {
             buildTree(definition)
         }
         viewModelScope.launch {
