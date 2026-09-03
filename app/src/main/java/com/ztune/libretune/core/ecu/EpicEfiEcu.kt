@@ -119,11 +119,11 @@ class EpicEfiEcu : EcuInterface {
         length: Int
     ): Result<ByteArray> = ioMutex.withLock {
         runCatching {
-            val cmd = buildJson {
-                "cmd" to "read"
-                "page" to page
-                "offset" to offset
-                "length" to length
+            val cmd = buildJsonObject {
+                put("cmd", "read")
+                put("page", page)
+                put("offset", offset)
+                put("length", length)
             }
             val resp = sendJsonCommand(cmd, COMMAND_TIMEOUT_MS)
             parseDataResponse(resp)
@@ -143,11 +143,11 @@ class EpicEfiEcu : EcuInterface {
             val base64 = android.util.Base64.encodeToString(
                 data, android.util.Base64.NO_WRAP
             )
-            val cmd = buildJson {
-                "cmd" to "write"
-                "page" to page
-                "offset" to offset
-                "data" to base64
+            val cmd = buildJsonObject {
+                put("cmd", "write")
+                put("page", page)
+                put("offset", offset)
+                put("data", base64)
             }
             val resp = sendJsonCommand(cmd, COMMAND_TIMEOUT_MS)
             val status = resp[0].jsonPrimitive.content
@@ -164,9 +164,9 @@ class EpicEfiEcu : EcuInterface {
  */
     override suspend fun burnPage(page: Int): Result<Unit> = ioMutex.withLock {
         runCatching {
-            val cmd = buildJson {
-                "cmd" to "burn"
-                "page" to page
+            val cmd = buildJsonObject {
+                put("cmd", "burn")
+                put("page", page)
             }
             val resp = sendJsonCommand(cmd, BURN_TIMEOUT_MS)
             val status = resp[0].jsonPrimitive.content
@@ -207,9 +207,9 @@ class EpicEfiEcu : EcuInterface {
             val cmd = if (commandTemplate.trimStart().startsWith('{')) {
                 Json.parseToJsonElement(commandTemplate).jsonObject
             } else {
-                buildJson {
-                    "cmd" to commandTemplate
-                    "value" to value
+                buildJsonObject {
+                    put("cmd", commandTemplate)
+                    put("value", value)
                 }
             }
             val resp = sendJsonCommand(cmd, COMMAND_TIMEOUT_MS)
@@ -262,8 +262,8 @@ class EpicEfiEcu : EcuInterface {
     // ==================================================================
 
     /** Build a simple command JSON object: `{"cmd":"<name>"}`. */
-    private fun buildJsonCommand(name: String): JsonObject = buildJson {
-        "cmd" to name
+    private fun buildJsonCommand(name: String): JsonObject = buildJsonObject {
+        put("cmd", name)
     }
 
     /**

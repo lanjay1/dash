@@ -62,7 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ztune.libretune.R
 import com.ztune.libretune.core.DataLogRecordingState
-import com.ztune.libretune.core.DatalogSession
+import com.ztune.libretune.core.datalog.DataLogSession
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -414,7 +414,7 @@ private fun RecordingControls(
 
 @Composable
 private fun SessionCard(
-    session: DatalogSession,
+    session: DataLogSession,
     onDelete: () -> Unit
 ) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
@@ -435,7 +435,7 @@ private fun SessionCard(
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = dateFormat.format(Date(session.startTimeMs)),
+                    text = dateFormat.format(Date(session.startedAt)),
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Spacer(modifier = Modifier.height(2.dp))

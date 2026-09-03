@@ -1,8 +1,11 @@
 package com.ztune.libretune.core.tune
 
+import android.content.Context
+import android.net.Uri
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToString
+import java.io.IOException
 import java.util.Base64
 
 /**
@@ -46,6 +49,39 @@ object TuneSerializer {
     fun deserialize(jsonString: String): Tune {
         val dto = json.decodeFromString<TuneDto>(jsonString)
         return dto.toDomain()
+    }
+
+    // ------------------------------------------------------------------
+    // Android file I/O helpers (Uri-based)
+    // ------------------------------------------------------------------
+
+    /**
+     * Serialize [tune] and write it to the document/blob at [uri] via the
+     * [Context.getContentResolver] SAF stream.
+     *
+     * @return [Result.success] on completion, or a failure wrapping the I/O
+     *   / serialization exception.
+     */
+    fun save(context: Context, uri: Uri, tune: Tune): Result<Unit> = runCatching {
+        val jsonString = serialize(tune)
+        val resolver = context.contentResolver
+        val out = resolver.openOutputStream(uri, "wt")
+            ?: throw IOException("Cannot open output stream for URI: $uri")
+        out.use { it.write(jsonString.toByteArray(Charsets.UTF_8)) }
+    }
+
+    /**
+     * Read the document/blob at [uri] and deserialize it back to a [Tune].
+     *
+     * @return [Result.success] with the parsed [Tune], or a failure wrapping
+     *   the I/O / deserialization exception.
+     */
+    fun load(context: Context, uri: Uri): Result<Tune> = runCatching {
+        val resolver = context.contentResolver
+        val inp = resolver.openInputStream(uri)
+            ?: throw IOException("Cannot open input stream for URI: $uri")
+        val jsonString = inp.use { it.readBytes().toString(Charsets.UTF_8) }
+        deserialize(jsonString)
     }
 
     // ======================================================================

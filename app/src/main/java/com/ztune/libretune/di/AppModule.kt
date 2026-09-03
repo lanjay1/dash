@@ -7,7 +7,7 @@ import com.ztune.libretune.core.EcuConnectionManager
 import com.ztune.libretune.core.EcuDefinitionRepository
 import com.ztune.libretune.core.TuneManager
 import com.ztune.libretune.core.git.TuneVersionControl
-import com.ztune.libretune.core.i18n.UnitPreferences
+import com.ztune.libretune.core.i18n.UnitPreferencesStore
 import com.ztune.libretune.core.ini.EcuDefinition
 import com.ztune.libretune.core.realtime.RealtimeChannelStore
 import com.ztune.libretune.core.realtime.RealtimeDecoder
@@ -132,7 +132,7 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideUnitPreferences(@ApplicationContext context: Context): UnitPreferences {
-        return UnitPreferences.getInstance(context)
+    fun provideUnitPreferences(@ApplicationContext context: Context): UnitPreferencesStore {
+        return UnitPreferencesStore.getInstance(context)
     }
 }

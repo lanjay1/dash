@@ -112,7 +112,8 @@ class EcuConnectionManager(
             val decoder = RealtimeDecoder(definition)
             while (isActive && gen == generation) {
                 try {
-                    val rawData = ecu.readRealtimeData().getOrNull() ?: run { delay(50); continue }
+                    val rawData = ecu.readRealtimeData().getOrNull()
+                    if (rawData == null) { delay(50); continue }
                     val decoded = decoder.decodeRealtimeData(rawData)
                     channelStore.updateChannels(decoded)
 

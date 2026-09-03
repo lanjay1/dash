@@ -1,8 +1,8 @@
 package com.ztune.libretune.core.git
 
 import android.content.Context
-import com.ztune.libretune.core.serialization.TuneSerializer
-import com.ztune.libretune.model.Tune
+import com.ztune.libretune.core.tune.Tune
+import com.ztune.libretune.core.tune.TuneSerializer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -89,9 +89,9 @@ class TuneVersionControl(
         private const val KEY_TIMESTAMP = "timestamp"
         private const val KEY_TUNE_HASH = "tuneHash"
         private const val KEY_TUNE_DATA = "tuneData"
-        private const val KEY_CONSTANTS = "constants"
-        private const val KEY_TABLES = "tables"
-        private const val KEY_CURVES = "curves"
+        private const val KEY_CONSTANTS = "constantValues"
+        private const val KEY_TABLES = "tableValues"
+        private const val KEY_CURVES = "curveValues"
         private const val DATE_FORMAT = "yyyy-MM-dd HH:mm:ss"
     }
 

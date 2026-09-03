@@ -6,9 +6,9 @@ import kotlin.math.*
 
 private enum class TokenType {
     NUMBER, STRING, IDENT, PLUS, MINUS, STAR, SLASH, PERCENT, CARET,
-    EQ, NEQ, LT, GT, LEQ, GEQ, ASSIGN, LPAREN, RPAREN, COMMA, DOTDOT,
+    EQ, NEQ, LT, GT, LEQ, GEQ, ASSIGN, LPAREN, RPAREN, COMMA, DOT, DOTDOT,
     IF, ELSEIF, ELSE, END, WHILE, DO, FOR, THEN, LOCAL, NIL, TRUE, FALSE,
-    NOT, AND, OR, EOF
+    NOT, AND, OR, RETURN, EOF
 }
 
 private data class Token(val type: TokenType, val value: String, val line: Int)
@@ -88,6 +88,7 @@ private class Lexer(private val src: String) {
             "for" -> TokenType.FOR; "then" -> TokenType.THEN; "local" -> TokenType.LOCAL
             "nil" -> TokenType.NIL; "true" -> TokenType.TRUE; "false" -> TokenType.FALSE
             "not" -> TokenType.NOT; "and" -> TokenType.AND; "or" -> TokenType.OR
+            "return" -> TokenType.RETURN
             else -> TokenType.IDENT
         }
         return Token(type, word, line)
@@ -106,6 +107,7 @@ private class Lexer(private val src: String) {
             '/' -> TokenType.SLASH; '%' -> TokenType.PERCENT; '^' -> TokenType.CARET
             '<' -> TokenType.LT; '>' -> TokenType.GT; '=' -> TokenType.ASSIGN
             '(' -> TokenType.LPAREN; ')' -> TokenType.RPAREN; ',' -> TokenType.COMMA
+            '.' -> TokenType.DOT
             else -> TokenType.EOF
         }
         return Token(st, c.toString(), line)
@@ -277,7 +279,12 @@ private class Parser(private val tokens: List<Token>) {
 
 // ── Interpreter ───────────────────────────────────────────────────────────────
 
-private class ReturnSignal(val value: Any?)
+/**
+ * Thrown inside a Lua script when `return` is executed; caught by the
+ * top-level [LuaEngine.execute] to terminate interpretation and yield the
+ * returned value.
+ */
+private class ReturnSignal(val value: Any?) : Throwable()
 
 private class Environment(private val parent: Environment? = null) {
     private val vars = mutableMapOf<String, Any?>()
@@ -302,6 +309,9 @@ fun interface EcuCommandCallback { fun execute(command: String, args: List<Any?>
 fun interface ChannelProvider { fun getChannel(name: String): Double? }
 /** Provides tune constant values by name. Returns Double or null. */
 fun interface ConstantProvider { fun getConstant(name: String): Double? }
+
+/** Top-level typealias for a Lua function value (a Kotlin lambda). */
+internal typealias LuaFunction = (List<Any?>) -> Any?
 
 class LuaEngine(
     private val channelProvider: ChannelProvider? = null,
@@ -347,7 +357,7 @@ class LuaEngine(
         math["abs"] = fn1 { kotlin.math.abs(it) }; math["floor"] = fn1 { floor(it) }
         math["ceil"] = fn1 { ceil(it) }; math["exp"] = fn1 { kotlin.math.exp(it) }
         math["log"] = fn1 { kotlin.math.ln(it) }; math["log10"] = fn1 { kotlin.math.log10(it) }
-        math["pow"] = fn2 { a, b -> kotlin.math.pow(a, b) }
+        math["pow"] = fn2 { a, b -> a.pow(b) }
         math["min"] = fn2 { a, b -> minOf(a, b) }
         math["max"] = fn2 { a, b -> maxOf(a, b) }
         math["fmod"] = fn2 { a, b -> a % b }
@@ -388,7 +398,7 @@ class LuaEngine(
         env.define("type") { args: List<Any?> ->
             when (args.getOrNull(0)) {
                 null -> "nil"; is Double -> "number"; is String -> "string"
-                is Boolean -> "boolean"; is Function, is Map<*, *> -> "table"; else -> "userdata"
+                is Boolean -> "boolean"; is Function<*>, is Map<*, *> -> "table"; else -> "userdata"
             }
         }
         // ecu command bridge
@@ -516,7 +526,7 @@ class LuaEngine(
             val key = eval(e.key, env)
             when {
                 table is Map<*, *> -> table[key]
-                key is String && table is Function -> null // invalid
+                key is String && table is Function<*> -> null // invalid
                 else -> null
             }
         }
@@ -533,7 +543,7 @@ class LuaEngine(
             "*" -> numBin(l, r, "*") { a, b -> a * b }
             "/" -> numBin(l, r, "/") { a, b -> if (b == 0.0) throw LuaError("Division by zero", 0) else a / b }
             "%" -> numBin(l, r, "%") { a, b -> a % b }
-            "^" -> numBin(l, r, "^") { a, b -> kotlin.math.pow(a, b) }
+            "^" -> numBin(l, r, "^") { a, b -> a.pow(b) }
             ".." -> (l?.toString() ?: "nil") + (r?.toString() ?: "nil")
             "==" -> luaEq(l, r)
             "~=" -> !luaEq(l, r)
@@ -574,10 +584,15 @@ class LuaEngine(
         val func = eval(e.func, env)
         val args = e.args.map { eval(it, env) }
         return when (func) {
-            is Function -> func(args)
+            is Function<*> -> {
+                @Suppress("UNCHECKED_CAST")
+                (func as (List<Any?>) -> Any?)(args)
+            }
             is Map<*, *> -> {
-                val fn = func["__call"] as? Function
-                fn?.invoke(args) ?: throw LuaError("Cannot call table (no __call metamethod)", 0)
+                val fn = func["__call"]
+                @Suppress("UNCHECKED_CAST")
+                (fn as? ((List<Any?>) -> Any?))?.invoke(args)
+                    ?: throw LuaError("Cannot call table (no __call metamethod)", 0)
             }
             else -> throw LuaError(
                 "Attempt to call a ${if (func == null) "nil value" else func::class.simpleName}", 0
@@ -593,6 +608,4 @@ class LuaEngine(
             v.toLong().toString() else v.toString()
         else -> v.toString()
     }
-
-    internal typealias Function = (List<Any?>) -> Any?
 }

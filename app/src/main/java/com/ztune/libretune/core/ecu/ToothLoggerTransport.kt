@@ -1,6 +1,6 @@
 package com.ztune.libretune.core.ecu
 
-import com.ztune.libretune.core.connection.EcuInterface
+import com.ztune.libretune.core.ecu.EcuInterface
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.nio.ByteBuffer
@@ -37,10 +37,12 @@ class ToothLoggerTransport(
  */
     suspend fun startCapture() {
         withContext(Dispatchers.IO) {
+            // sendControllerCommand returns Result<ByteArray>; throw on failure.
             ecu.sendControllerCommand(
-                code = TS_CMD_TOOTH_LOGGER_START,
-                data = null,
-            )
+                name = "tooth_logger_start",
+                commandTemplate = "",
+                value = TS_CMD_TOOTH_LOGGER_START,
+            ).getOrThrow()
         }
     }
 
@@ -52,9 +54,10 @@ class ToothLoggerTransport(
     suspend fun stopCapture(): List<ToothEvent> {
         return withContext(Dispatchers.IO) {
             val raw = ecu.sendControllerCommand(
-                code = TS_CMD_TOOTH_LOGGER_STOP,
-                data = null,
-            )
+                name = "tooth_logger_stop",
+                commandTemplate = "",
+                value = TS_CMD_TOOTH_LOGGER_STOP,
+            ).getOrThrow()
             parseToothLog(raw)
         }
     }

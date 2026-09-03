@@ -72,7 +72,10 @@ class BluetoothTransport(
             }
 
             try {
-                sock.connectTimeout = connectTimeoutMs
+                // NOTE: BluetoothSocket has no built-in connect timeout.
+                // The blocking connect() runs on Dispatchers.IO; callers should
+                // cancel the surrounding coroutine (or wrap in withTimeout)
+                // if a bounded connect deadline is required.
                 sock.connect()
             } catch (e: IOException) {
                 try { sock.close() } catch (_: IOException) {}

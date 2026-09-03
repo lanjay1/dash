@@ -39,6 +39,17 @@ enum class TransportType {
 }
 
 /**
- * Exception thrown when a transport operation fails.
+ * Exception thrown when a transport operation fails (connect / disconnect /
+ * send / receive).  Wraps the underlying I/O error if any.
  */
 class TransportException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+/**
+ * Exception thrown when an ECU protocol-level error occurs: bad or unexpected
+ * response framing, CRC mismatch, JSON error response from the ECU, missing
+ * required fields, etc.
+ *
+ * Distinct from [TransportException] so callers can differentiate between
+ * "couldn't talk to the ECU" and "ECU replied but the reply was invalid".
+ */
+class ProtocolException(message: String, cause: Throwable? = null) : Exception(message, cause)

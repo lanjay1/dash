@@ -6,7 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ztune.libretune.core.DataLogManager
 import com.ztune.libretune.core.DataLogRecordingState
-import com.ztune.libretune.core.DatalogSession
+import com.ztune.libretune.core.datalog.DataLogSession
 import com.ztune.libretune.core.EcuConnectionManager
 import com.ztune.libretune.core.EcuConnectionStatus
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,7 +34,7 @@ data class DatalogUiState(
     val isConnected: Boolean = false,
     val recordingState: DataLogRecordingState = DataLogRecordingState.IDLE,
     val sampleCount: Int = 0,
-    val sessions: List<DatalogSession> = emptyList(),
+    val sessions: List<DataLogSession> = emptyList(),
     val availableChannels: List<String> = emptyList(),
     val selectedChannels: Set<String> = emptySet(),
     val showChannelPicker: Boolean = false,

@@ -60,12 +60,12 @@ private val Context.unitPrefsDataStore: DataStore<Preferences> by preferencesDat
  *
  * Usage:
  * ```
- * val prefs = UnitPreferences.getInstance(context)
+ * val prefs = UnitPreferencesStore.getInstance(context)
  * val current = prefs.flow.first() // or collect in Compose
- * val displayTemp = UnitPreferences.convertTemperature(90.0, TemperatureUnit.CELSIUS, current.temperature)
+ * val displayTemp = UnitPreferencesStore.convertTemperature(90.0, TemperatureUnit.CELSIUS, current.temperature)
  * ```
  */
-class UnitPreferences private constructor(private val dataStore: DataStore<Preferences>) {
+class UnitPreferencesStore private constructor(private val dataStore: DataStore<Preferences>) {
 
     /** Hot flow of the current preferences — observe from UI via `collectAsState()`. */
     val flow: Flow<UnitPreferences> = dataStore.data.map { prefs ->
@@ -100,12 +100,12 @@ class UnitPreferences private constructor(private val dataStore: DataStore<Prefe
     // ==================================================================
 
     companion object {
-        @Volatile private var instance: UnitPreferences? = null
+        @Volatile private var instance: UnitPreferencesStore? = null
 
-        /** Get or create the singleton [UnitPreferences] backed by [context]. */
-        fun getInstance(context: Context): UnitPreferences {
+        /** Get or create the singleton [UnitPreferencesStore] backed by [context]. */
+        fun getInstance(context: Context): UnitPreferencesStore {
             return instance ?: synchronized(this) {
-                instance ?: UnitPreferences(context.unitPrefsDataStore).also { instance = it }
+                instance ?: UnitPreferencesStore(context.unitPrefsDataStore).also { instance = it }
             }
         }
 
