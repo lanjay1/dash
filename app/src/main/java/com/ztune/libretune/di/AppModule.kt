@@ -64,13 +64,33 @@ object AppModule {
     }
 
     /**
-     * Provide [RealtimeDecoder] unscoped.
+     * Provide a default (empty) [EcuDefinition] so the Hilt DI graph can be
+     * resolved at compile time.
      *
-     * The decoder depends on an [EcuDefinition] which changes per-connection,
-     * so callers should create a fresh instance (or use a factory / assisted
-     * inject) when the definition changes.
+     * The real, ECU-specific definition is owned by [EcuConnectionManager]
+     * (via its public `activeDefinition` field) and gets swapped in once an
+     * ECU is connected. Singleton-scoped here so any singleton manager
+     * (e.g. [TuneManager]) that depends on it can be constructed without a
+     * live ECU; managers that need the up-to-date definition should read
+     * it from [EcuConnectionManager.activeDefinition] at call time.
      */
     @Provides
+    @Singleton
+    fun provideDefaultEcuDefinition(): EcuDefinition = EcuDefinition.default()
+
+    /**
+     * Provide [RealtimeDecoder] bound to the default [EcuDefinition].
+     *
+     * The decoder is intrinsically per-connection (it depends on the active
+     * [EcuDefinition]); this provider is only used to satisfy compile-time
+     * DI graph resolution for singleton consumers like [TuneManager].
+     *
+     * Callers that need a decoder for the *current* ECU connection should
+     * construct one explicitly via `RealtimeDecoder(connectionManager
+     * .activeDefinition!!)` rather than injecting this default instance.
+     */
+    @Provides
+    @Singleton
     fun provideRealtimeDecoder(definition: EcuDefinition): RealtimeDecoder {
         return RealtimeDecoder(definition)
     }
@@ -107,8 +127,8 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideDataLogManager(): DataLogManager {
-        return DataLogManager()
+    fun provideDataLogManager(@ApplicationContext context: Context): DataLogManager {
+        return DataLogManager(context)
     }
 
     @Provides
