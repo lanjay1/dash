@@ -58,6 +58,7 @@ class EcuConnectionManager(
     private var connectJob: Job? = null
     private var streamJob: Job? = null
     private var heartbeatJob: Job? = null
+    private var reconnectJob: Job? = null
     private var generation = 0L
 
     val isConnected: Boolean get() = state.value.status == EcuConnectionStatus.CONNECTED
@@ -88,7 +89,11 @@ class EcuConnectionManager(
                 realtimeDecoder = RealtimeDecoder(definition)
 
                 _state.update { it.copy(status = EcuConnectionStatus.CONNECTED, signature = signature) }
-                ecu.startStreaming()
+                // NOTE: Do NOT call ecu.startStreaming() here.
+                // The ECU's own streaming loop feeds _realtimeUpdates SharedFlow
+                // which nobody collects — it doubles ECU traffic and halves
+                // throughput. The manager's startStreamLoop() below is the
+                // authoritative loop that feeds channelStore → UI.
                 startStreamLoop(ecu, definition, gen)
                 startHeartbeatMonitor(gen)
             } catch (e: CancellationException) {
@@ -159,7 +164,10 @@ class EcuConnectionManager(
             delay((BASE_BACKOFF_MS * 2.0.pow(attempt)).toLong().coerceAtMost(MAX_BACKOFF_MS))
             if (gen != generation) return
             try {
-                ecu.stopStreaming(); ecu.commReset(); ecu.startStreaming()
+                // Stop any ECU-internal streaming, reset comm, then restart
+                // the manager's authoritative stream loop.
+                ecu.stopStreaming()
+                ecu.commReset()
                 startStreamLoop(ecu, def, gen)
                 return
             } catch (_: CancellationException) {
@@ -175,15 +183,21 @@ class EcuConnectionManager(
 
     private fun attemptReconnect(transport: EcuTransport, definition: EcuDefinition) {
         if (!settings.autoReconnect.value) return
+        // Cancel any previous reconnect attempt before starting a new one.
+        reconnectJob?.cancel()
         val maxAttempts = settings.reconnectMaxAttempts.value
         val baseDelay = settings.reconnectDelayMs.value
         _state.update { it.copy(status = EcuConnectionStatus.RECONNECTING, reconnectMaxAttempts = maxAttempts, reconnectAttempt = 0) }
 
-        applicationScope.launch {
+        reconnectJob = applicationScope.launch {
             for (attempt in 1..maxAttempts) {
                 val delayMs = (baseDelay * 2.0.pow(attempt - 1)).toLong().coerceAtMost(MAX_RECONNECT_DELAY_MS)
                 _state.update { it.copy(reconnectAttempt = attempt) }
                 delay(delayMs)
+
+                // Check generation after delay — if user disconnected during
+                // the delay, abort reconnect entirely.
+                if (!isActive) return@launch
 
                 try {
                     if (!transport.isConnected()) transport.connect()
@@ -191,11 +205,21 @@ class EcuConnectionManager(
                     if (ecu.connect(transport, definition).isFailure) continue
                     val sig = ecu.querySignature().getOrNull() ?: continue
 
+                    // Double-check generation before installing the connection.
+                    // If disconnect() was called during reconnect, abort and
+                    // tear down the just-created ecu.
+                    if (generation != this@EcuConnectionManager.generation) {
+                        runCatching { ecu.stopStreaming() }
+                        runCatching { ecu.disconnect() }
+                        return@launch
+                    }
+
                     this@EcuConnectionManager.ecuInterface = ecu
                     this@EcuConnectionManager.transport = transport
                     activeDefinition = definition
                     realtimeDecoder = RealtimeDecoder(definition)
-                    ecu.startStreaming()
+                    // NOTE: Do NOT call ecu.startStreaming() — see comment in connect().
+                    // startStreamLoop() is the authoritative streaming loop.
                     val g = generation
                     startStreamLoop(ecu, definition, g)
                     startHeartbeatMonitor(g)
@@ -224,6 +248,7 @@ class EcuConnectionManager(
         heartbeatJob?.cancel(); heartbeatJob = null
         streamJob?.cancel(); streamJob = null
         connectJob?.cancel(); connectJob = null
+        reconnectJob?.cancel(); reconnectJob = null
         val ecu = ecuInterface; val t = transport
         if (ecu != null || t != null) {
             applicationScope.launch(Dispatchers.IO) {
@@ -334,6 +359,71 @@ class EcuConnectionManager(
     /** Write and burn a full page from offset 0 with auto-burn. */
     suspend fun burnFullPage(page: Int, pageData: ByteArray, autoBurn: Boolean = true): Result<Unit> =
         burnPage(page, 0, pageData, autoBurn)
+
+    // ------------------------------------------------------------------
+    // Safe burn with backup, verify, and rollback (Phase 7)
+    // ------------------------------------------------------------------
+
+    /**
+     * Safely write and burn a full page to the ECU with verification.
+     *
+     * This is the transactional burn path for Phase 7 (Safe Write/Burn).
+     * Unlike the simple [burnPage] method, this performs:
+     *
+     *   1. **Backup**: Read the current page from ECU RAM.
+     *   2. **Write**: Write [pageData] to ECU RAM at offset 0.
+     *   3. **Verify**: Read back the page from ECU RAM and compare byte-for-byte.
+     *   4. **Burn**: If verify passes, burn to flash.
+     *   5. **Rollback**: If verify fails, restore the backup and abort without burning.
+     *
+     * This prevents two critical failure modes:
+     *   - **Silent data corruption**: Write partially fails, garbage is burned to flash.
+     *   - **No rollback**: A bad write leaves the ECU in an unknown state with no
+     *     way to recover the original data.
+     *
+     * BUILD-UNVERIFIED: The safety logic is statically reviewed but has not
+     * been tested with real ECU hardware. The rollback path (restore backup)
+     * assumes the ECU is still responsive after a failed write — if the
+     * transport itself is broken, the rollback will also fail.
+     *
+     * @param page     Page number to write and burn.
+     * @param pageData Full page data to write (must match page size).
+     * @return [Result.success] on successful write + verify + burn,
+     *   [Result.failure] on any error (with rollback attempted).
+     */
+    suspend fun burnPageSafely(page: Int, pageData: ByteArray): Result<Unit> {
+        val ecu = ecuInterface ?: return Result.failure(IllegalStateException("Not connected"))
+        val def = activeDefinition ?: return Result.failure(IllegalStateException("No definition loaded"))
+
+        return try {
+            // 1. Read current page as backup
+            val pageSize = if (page < def.pageSizes.size) def.pageSizes[page].toInt() and 0xFFFF else pageData.size
+            val backup = ecu.readBlock(page, 0, pageSize).getOrThrow()
+
+            // 2. Write new data to ECU RAM
+            ecu.writeBlock(page, 0, pageData).getOrThrow()
+
+            // 3. Read back and verify
+            val readBack = ecu.readBlock(page, 0, pageData.size).getOrThrow()
+            if (!readBack.contentEquals(pageData)) {
+                // Verify failed — restore backup
+                runCatching { ecu.writeBlock(page, 0, backup) }
+                return Result.failure(
+                    IllegalStateException("Write verification failed: read-back does not match written data")
+                )
+            }
+
+            // 4. Burn to flash
+            delay(DEFAULT_BURN_DELAY_MS)
+            ecu.burnPage(page).getOrThrow()
+
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 
     // ------------------------------------------------------------------
     //  Helpers

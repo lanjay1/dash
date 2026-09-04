@@ -185,7 +185,7 @@ object TableOperations {
     }
 
     // ======================================================================
-    // Interpolate cells (bilinear)
+    // Interpolate cells (bilinear gap fill)
     // ======================================================================
 
     /**
@@ -220,7 +220,6 @@ object TableOperations {
         }
 
         val selection = selectedCells.toSet()
-        // Iteratively fill NaN cells until no progress is made (max 50 passes).
         var changed = true
         var passCount = 0
         while (changed && passCount < 50) {
@@ -230,7 +229,6 @@ object TableOperations {
                 if (r !in table.indices || c !in table[r].indices) continue
                 if (!table[r][c].isNaN()) continue
 
-                // Find nearest defined neighbors with inverse-distance weighting
                 var weightedSum = 0.0
                 var weightTotal = 0.0
                 for (dr in -3..3) {
@@ -254,5 +252,90 @@ object TableOperations {
             }
         }
         return table
+    }
+
+    // ======================================================================
+    // Bilinear interpolation (3D table lookup)
+    // ======================================================================
+
+    /**
+     * Perform bilinear interpolation on a 3D table to find the value at
+     * a non-exact (x, y) coordinate.
+     *
+     * This is the standard algorithm used by ECU firmware to compute fuel/
+     * ignition values between bin centers. Given:
+     *   - [xBins]: column axis values (e.g. RPM bins)
+     *   - [yBins]: row axis values (e.g. load/MAP bins)
+     *   - [values]: 2D grid of cell values, indexed as values[row][col]
+     *   - [targetX]: the X coordinate to look up (e.g. current RPM)
+     *   - [targetY]: the Y coordinate to look up (e.g. current MAP)
+     *
+     * The algorithm:
+     *   1. Find the bin indices (i, j) such that xBins[i] <= targetX < xBins[i+1]
+     *      and yBins[j] <= targetY < yBins[j+1].
+     *   2. Compute the fractional position (fx, fy) within the cell.
+     *   3. Bilinearly interpolate between the four corner cells:
+     *      v = (1-fx)(1-fy)*v00 + fx*(1-fy)*v10 + (1-fx)*fy*v01 + fx*fy*v11
+     *
+     * If [targetX] or [targetY] is outside the axis range, the nearest edge
+     * bin is used (clamping).
+     *
+     * @return The interpolated value, or `Double.NaN` if the table is empty
+     *   or the axes are empty.
+     */
+    fun interpolateValue(
+        xBins: List<Double>,
+        yBins: List<Double>,
+        values: List<List<Double>>,
+        targetX: Double,
+        targetY: Double
+    ): Double {
+        if (xBins.isEmpty() || yBins.isEmpty() || values.isEmpty()) return Double.NaN
+        val cols = xBins.size
+        val rows = yBins.size
+        if (values.size < rows || values[0].size < cols) return Double.NaN
+
+        // Find X bin interval (column indices)
+        val (x0, x1) = findBinInterval(xBins, targetX)
+        // Find Y bin interval (row indices)
+        val (y0, y1) = findBinInterval(yBins, targetY)
+
+        // Four corner values
+        val v00 = values[y0][x0]
+        val v10 = values[y0][x1]
+        val v01 = values[y1][x0]
+        val v11 = values[y1][x1]
+
+        // Fractional positions
+        val xRange = xBins[x1] - xBins[x0]
+        val yRange = yBins[y1] - yBins[y0]
+        val fx = if (xRange == 0.0) 0.0 else (targetX - xBins[x0]) / xRange
+        val fy = if (yRange == 0.0) 0.0 else (targetY - yBins[y0]) / yRange
+
+        // Bilinear interpolation
+        return (1 - fx) * (1 - fy) * v00 +
+               fx * (1 - fy) * v10 +
+               (1 - fx) * fy * v01 +
+               fx * fy * v11
+    }
+
+    /**
+     * Find the bin interval [i, i+1] that contains [target], or clamp to
+     * the nearest edge if [target] is outside the range.
+     *
+     * @return Pair of (lowerIndex, upperIndex). If target < bins[0], returns
+     *   (0, 0). If target >= bins.last(), returns (last, last).
+     */
+    private fun findBinInterval(bins: List<Double>, target: Double): Pair<Int, Int> {
+        if (bins.isEmpty()) return Pair(0, 0)
+        if (target <= bins[0]) return Pair(0, 0)
+        if (target >= bins.last()) return Pair(bins.size - 1, bins.size - 1)
+
+        for (i in 0 until bins.size - 1) {
+            if (target >= bins[i] && target < bins[i + 1]) {
+                return Pair(i, i + 1)
+            }
+        }
+        return Pair(bins.size - 1, bins.size - 1)
     }
 }

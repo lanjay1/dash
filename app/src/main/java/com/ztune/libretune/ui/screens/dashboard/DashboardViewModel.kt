@@ -10,13 +10,18 @@ import com.ztune.libretune.core.dash.DashboardConfig
 import com.ztune.libretune.core.dash.DashboardSerializer
 import com.ztune.libretune.core.dash.GaugeWidgetConfig
 import com.ztune.libretune.core.dash.GaugeWidgetType
+import com.ztune.libretune.core.realtime.RealtimeChannelStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.UUID
 import javax.inject.Inject
 
@@ -48,11 +53,15 @@ data class DashboardUiState(
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val connectionManager: EcuConnectionManager,
+    private val channelStore: RealtimeChannelStore,
     @ApplicationContext private val appContext: Context
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
+
+    /** Debounce job for auto-save to avoid blocking I/O on every config change. */
+    private var autoSaveJob: Job? = null
 
     // ========================================================================
     //  Initialization
@@ -68,6 +77,17 @@ class DashboardViewModel @Inject constructor(
                         connectionStatus = formatStatus(connState.status, connState.transportName)
                     )
                 }
+            }
+        }
+
+        // ---- Phase 4: Subscribe to realtime channel store ----
+        // This is the critical fix: without this subscription, all dashboard
+        // gauges permanently show 0.0 because channelValues is never updated.
+        // The channelStore is updated by EcuConnectionManager's streaming loop
+        // (startStreamLoop → decoder.decodeRealtimeData → channelStore.updateChannels).
+        viewModelScope.launch {
+            channelStore.channels.collect { values ->
+                _uiState.update { it.copy(channelValues = values) }
             }
         }
 
@@ -313,12 +333,24 @@ class DashboardViewModel @Inject constructor(
     }
 
     /**
-     * Auto-save on config changes (debounced in a real app; immediate for now).
+     * Auto-save on config changes (debounced + off-main-thread).
+     *
+     * Previous implementation called saveDashboard() synchronously on the
+     * Main thread, which did file.writeText() — blocking I/O that could
+     * cause ANR on every widget add/remove/update.
+     *
+     * Now: cancel any pending save, launch a new coroutine that waits 500ms
+     * (debounce) then saves on Dispatchers.IO. If another config change
+     * arrives within 500ms, the previous save is cancelled.
      */
     private fun autoSave() {
-        // In a production app this would be debounced via a coroutine job.
-        // For now we save immediately on any configuration change.
-        saveDashboard()
+        autoSaveJob?.cancel()
+        autoSaveJob = viewModelScope.launch {
+            delay(500) // debounce — skip rapid successive changes
+            withContext(Dispatchers.IO) {
+                saveDashboard()
+            }
+        }
     }
 
     private fun formatStatus(

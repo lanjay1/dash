@@ -1,10 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- ===== ECU communication permissions ===== -->
+
     <!-- USB host mode (OTG) for ECU serial communication -->
     <uses-feature
         android:name="android.hardware.usb.host"
         android:required="false" />
+
+    <!-- TCP transport (Wi-Fi ECU, rusEFI WiFi, simulator) -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Bluetooth classic (BT SPP RFCOMM) for wireless ECU -->
+    <!-- BLUETOOTH/BLUETOOTH_ADMIN for API <= 30, BLUETOOTH_CONNECT for API 31+ -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- Foreground service for ECU streaming while app is backgrounded -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+    <!-- Notification permission for foreground service notification (API 33+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Wake lock to keep CPU running during background datalogging -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
         android:name=".LibreTuneApplication"
@@ -18,11 +40,20 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustResize"
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Auto-launch when USB device is attached (ECU plug-in) -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/device_filter" />
         </activity>
     </application>
 

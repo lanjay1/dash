@@ -31,6 +31,13 @@ class UsbSerialTransport(
 
     override suspend fun connect() {
         withContext(Dispatchers.IO) {
+            // Idempotent: if already connected, return immediately.
+            // This matches TcpTransport and BluetoothTransport behavior and
+            // prevents "Port already open" exceptions when multiple callers
+            // (e.g. ConnectionViewModel + MegaSquirtEcu.connect) invoke
+            // transport.connect() on the same instance.
+            if (_connected) return@withContext
+
             val drivers = UsbSerialProber.getDefaultProber().findAllDrivers(usbManager)
             val driver = drivers.find { it.device == device }
                 ?: throw TransportException(

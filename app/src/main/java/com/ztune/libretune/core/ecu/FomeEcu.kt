@@ -2,24 +2,29 @@ package com.ztune.libretune.core.ecu
 
 import com.ztune.libretune.core.ini.EcuDefinition
 import com.ztune.libretune.core.ini.types.EcuType
+import com.ztune.libretune.core.protocol.ms.MsConstants
 import com.ztune.libretune.core.protocol.ms.MsProtocolClient
+import com.ztune.libretune.core.protocol.ms.ProtocolMode
+import com.ztune.libretune.core.util.runCatchingCancellable
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
 /**
  * FOME (Frankenso Open Motor control Ecu) implementation.
  *
- * FOME extends the MegaSquirt serial protocol with additional features:
- * - Uses the same 0x5A framing and CRC-16 scheme as MS.
- * - Custom signature format that includes "FOME" identifier.
- * - Additional calibration commands for CAN bus configuration.
- * - Extended burn sequence that may require a page-specific command.
- * - Reads the INI's [ProtocolSettings.burnCommand] for burn overrides.
+ * FOME is a fork of rusEFI and uses the TunerStudio Binary Protocol (TS-BP):
+ *   - 0x5A header framing with 0x7D byte-stuffing
+ *   - CRC-16/CCITT integrity checks
+ *   - Little-endian offset encoding
  *
- * This class delegates to [MsProtocolClient] for the core MS protocol
- * and adds FOME-specific behaviour on top.
+ * Uses [MsProtocolClient] in [ProtocolMode.FRAMED] mode.
  *
- * @see <a href="https://github.com/kaveman/FOME">FOME project</a>
+ * Custom features:
+ * - Extended signature query via 'F' command (falls back to 'Q')
+ * - CAN bus configuration via 'C' command
+ * - INI-defined burn command overrides via [ProtocolSettings.burnCommand]
+ *
+ * @see <a href="https://github.com/FOME-Tech/fome">FOME project</a>
  */
 class FomeEcu : EcuInterface {
     override val ecuType = EcuType.FOME
@@ -44,8 +49,6 @@ class FomeEcu : EcuInterface {
 
         /**
          * FOME-specific calibration command: request CAN channel configuration.
-         * Sent as a controller command that returns a binary payload describing
-         * the CAN bus setup (baud rate, ID filter, etc.).
          */
         private const val CMD_FOME_CAN_CONFIG: Byte = 'C'.code.toByte()
 
@@ -64,14 +67,13 @@ class FomeEcu : EcuInterface {
     override suspend fun connect(
         transport: EcuTransport,
         definition: EcuDefinition
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = runCatchingCancellable {
         transport.connect()
         this.transport = transport
         this.definition = definition
-        protocolClient = MsProtocolClient(transport)
+        // FRAMED mode: TS-BP with 0x5A + CRC-16, little-endian — correct for FOME (rusEFI fork)
+        protocolClient = MsProtocolClient(transport, ProtocolMode.FRAMED)
 
-        // FOME first attempts the extended signature command ('F');
-        // if the firmware doesn't support it, fall back to standard 'Q'.
         val sig = querySignature().getOrThrow()
         val expected = definition.signaturePrefix ?: definition.signature
         if (expected.isNotEmpty() && !sig.lowercase().contains("fome")) {
@@ -104,13 +106,13 @@ class FomeEcu : EcuInterface {
             val payload = extendedResult.getOrThrow()
             val text = payload
                 .takeWhile { it != 0.toByte() }
-            .toByteArray()
+                .toByteArray()
             val sig = String(text, Charsets.US_ASCII).trim()
             if (sig.isNotEmpty() && sig.contains("fome", ignoreCase = true)) {
                 return Result.success(sig)
             }
         }
-        // Fall back to standard MS signature query.
+        // Fall back to standard signature query.
         return client.querySignature()
     }
 
@@ -154,12 +156,15 @@ class FomeEcu : EcuInterface {
     }
 
     /**
-     * FOME real-time data: delegates to the standard 'S' command via MsProtocolClient.
+     * FOME real-time data: uses 'A' command (TS-BP standard for OCH data).
+     *
+     * Previous code used 'S' which is incorrect. rusEFI/FOME use 'A' for
+     * the realtime data burst over TS-BP.
      */
     override suspend fun readRealtimeData(): Result<ByteArray> {
         val client = protocolClient
             ?: return Result.failure(TransportException("Not connected"))
-        return client.sendCommand('S'.code.toByte())
+        return client.sendCommand(MsConstants.CMD_REALTIME, expectedResponseLength = 0)
     }
 
     override suspend fun sendControllerCommand(

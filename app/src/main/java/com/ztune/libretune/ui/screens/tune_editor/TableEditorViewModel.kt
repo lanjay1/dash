@@ -3,6 +3,7 @@ package com.ztune.libretune.ui.screens.tune_editor
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ztune.libretune.core.EcuConnectionManager
 import com.ztune.libretune.core.TuneManager
 import com.ztune.libretune.core.ini.EcuDefinition
 import com.ztune.libretune.core.ini.types.TableDefinition
@@ -19,6 +20,7 @@ import kotlinx.coroutines.launch
 class TableEditorViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val tuneManager: TuneManager,
+    private val connectionManager: EcuConnectionManager,
     private val channelStore: RealtimeChannelStore
 ) : ViewModel() {
 
@@ -196,24 +198,106 @@ class TableEditorViewModel @Inject constructor(
         if (cell in lockedCells) lockedCells.remove(cell) else lockedCells.add(cell)
     }
 
+    /**
+     * Undo the last cell edit.
+     *
+     * Phase 5 fix: Previously, undo only restored the UI state (displayed
+     * values) but did NOT revert the pageData bytes that were already
+     * encoded by [applyValues] → [tuneManager.updateTableCell]. This meant
+     * that after undo, displayed values ≠ stored values, and a subsequent
+     * save/burn would write the post-edit bytes instead of the pre-edit ones.
+     *
+     * Now: undo re-encodes every reverted cell back into pageData via
+     * [tuneManager.updateTableCell], so displayed and stored values stay
+     * in sync.
+     */
     fun undo() {
         if (undoStack.isEmpty()) return
         redoStack.addLast(_uiState.value.values.map { it.toList() })
         val prev = undoStack.removeLast()
+        // Re-encode reverted values into pageData
+        tableDef?.let { tbl ->
+            for (r in prev.indices) {
+                for (c in prev[r].indices) {
+                    tuneManager.updateTableCell(tableName, r, c, prev[r][c])
+                }
+            }
+        }
         _uiState.update { it.copy(values = prev, isModified = true, canUndo = undoStack.isNotEmpty(), canRedo = true) }
     }
 
+    /**
+     * Redo a previously undone edit.
+     *
+     * Like [undo], this re-encodes the redone values into pageData.
+     */
     fun redo() {
         if (redoStack.isEmpty()) return
         undoStack.addLast(_uiState.value.values.map { it.toList() })
         val next = redoStack.removeLast()
+        // Re-encode redone values into pageData
+        tableDef?.let { tbl ->
+            for (r in next.indices) {
+                for (c in next[r].indices) {
+                    tuneManager.updateTableCell(tableName, r, c, next[r][c])
+                }
+            }
+        }
         _uiState.update { it.copy(values = next, isModified = true, canUndo = true, canRedo = redoStack.isNotEmpty()) }
     }
 
+    /**
+     * Burn the current table to the ECU.
+     *
+     * Phase 6-7: Real write → verify → burn implementation.
+     *
+     * Flow:
+     *   1. Get the table's page number and page data from TuneManager
+     *   2. Call connectionManager.burnPageSafely(page, pageData) which does:
+     *      a. Read current page (backup)
+     *      b. Write new page data to ECU RAM
+     *      c. Read back and verify byte-for-byte
+     *      d. If verify passes → burn to flash
+     *      e. If verify fails → restore backup, abort
+     *   3. Update UI state based on result
+     *
+     * BUILD-UNVERIFIED: This is the first real ECU write path. It has not
+     * been tested with real hardware. The safety layer (backup/verify/restore)
+     * is statically reviewed but requires runtime validation.
+     */
     fun burnTable() {
+        val tbl = tableDef ?: run {
+            _uiState.update { it.copy(burnError = "No table definition loaded") }
+            return
+        }
+        val tune = tuneManager.currentTune ?: run {
+            _uiState.update { it.copy(burnError = "No tune loaded") }
+            return
+        }
+        val pageData = tune.getPageData(tbl.valuesPage) ?: run {
+            _uiState.update { it.copy(burnError = "No page data for page ${tbl.valuesPage}") }
+            return
+        }
+
+        _uiState.update { it.copy(isBurning = true, burnError = null) }
+
         viewModelScope.launch {
-            _uiState.update { it.copy(isBurning = true) }
-            _uiState.update { it.copy(isBurning = false, isModified = false) }
+            val result = connectionManager.burnPageSafely(
+                page = tbl.valuesPage,
+                pageData = pageData
+            )
+            result.fold(
+                onSuccess = {
+                    _uiState.update {
+                        it.copy(isBurning = false, isModified = false, burnError = null)
+                    }
+                },
+                onFailure = { e ->
+                    _uiState.update {
+                        it.copy(isBurning = false, burnError = e.message ?: "Burn failed")
+                    }
+                }
+            )
         }
     }
 
@@ -293,6 +377,7 @@ class TableEditorViewModel @Inject constructor(
         val isModified: Boolean = false, val units: String = "", val format: String = "0.0",
         val min: Double = 0.0, val max: Double = 255.0, val canUndo: Boolean = false,
         val canRedo: Boolean = false, val isBurning: Boolean = false,
+        val burnError: String? = null,
         val liveXValue: Double? = null, val liveYValue: Double? = null,
         val liveCell: Pair<Int, Int>? = null
     )

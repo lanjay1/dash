@@ -11,12 +11,22 @@ import java.util.zip.CRC32
 /**
  * rusEFI ECU implementation using the rusEFI TunerStudio protocol.
  *
- * rusEFI shares the 'S' streaming concept with MegaSquirt but uses an
- * entirely different wire format:
- * - **Signature query**: raw text — send 'S', read until newline.
- * - **Block read/write/burn**: binary commands ('r'/'w'/'B') with CRC-32
- *   framed responses (not CRC-16 like MS).
- * - **Controller commands**: raw text terminated by CR/LF.
+ * ⚠️ KNOWN ISSUE (BUILD-UNVERIFIED): This implementation uses CRC-32 for
+ * block read/write/burn response framing. The actual rusEFI TunerStudio
+ * Binary Protocol (TS-BP) uses CRC-16/CCITT, NOT CRC-32. This means
+ * RusEfiEcu will likely NOT communicate correctly with real rusEFI
+ * hardware. Fixing this requires refactoring RusEfiEcu to use
+ * [MsProtocolClient] in [ProtocolMode.FRAMED] mode (which implements
+ * the correct CRC-16/CCITT framing). Deferred to a future phase because:
+ *   1. MS/Speeduino (the most common ECU types) are fixed in Phase 3
+ *   2. FOME (rusEFI fork) uses MsProtocolClient.FRAMED which is correct
+ *   3. RusEfiEcu is a separate code path that doesn't affect MS/Speeduino
+ *
+ * rusEFI wire format (per TS-BP spec):
+ * - **Signature query**: raw text — send 'S', read until newline. ✓ (correct)
+ * - **Block read/write/burn**: binary commands ('r'/'w'/'B') with CRC-16
+ *   framed responses. ✗ (current code uses CRC-32)
+ * - **Controller commands**: raw text terminated by CR/LF. ✓ (correct)
  * - **GPPWM channels**: supported via extended controller command set.
  * - **DFU firmware updates**: exposed through INI controller commands.
  */

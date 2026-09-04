@@ -40,12 +40,14 @@ object EcuFactory {
     fun detectFromSignature(signature: String): EcuType {
         val lower = signature.lowercase()
         return when {
-            lower.contains("speeduino")                             -> EcuType.SPEEDUINO
-            lower.contains("rusefi") || lower.contains("rusefi")  -> EcuType.RUSEFI
-            lower.contains("fome")                                  -> EcuType.FOME
+            lower.contains("speeduino")                              -> EcuType.SPEEDUINO
+            lower.contains("rusefi") || lower.contains("rus efi") ||
+                lower.contains("rus_efi")                            -> EcuType.RUSEFI
+            lower.contains("fome")                                   -> EcuType.FOME
             lower.contains("epicefi") || lower.contains("epic efi") -> EcuType.EPICEFI
-            lower.contains("megasquirt") || lower.contains("ms")   -> EcuType.MEGASQUIRT
-            else                                                    -> EcuType.UNKNOWN
+            lower.contains("megasquirt") || lower.contains("ms3") ||
+                lower.contains("ms2") || lower.contains("ms1")      -> EcuType.MEGASQUIRT
+            else                                                     -> EcuType.UNKNOWN
         }
     }
 }

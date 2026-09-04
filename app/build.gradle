@@ -76,9 +76,6 @@ dependencies {
     // USB Serial
     implementation libs.usb.serial
 
-    // Bluetooth
-    implementation 'androidx.bluetooth:bluetooth:1.0.0-alpha02'
-
     // Room
     implementation libs.androidx.room.runtime
     implementation libs.androidx.room.ktx

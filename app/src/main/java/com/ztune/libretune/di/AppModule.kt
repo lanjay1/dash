@@ -9,9 +9,7 @@ import com.ztune.libretune.core.EcuDefinitionRepository
 import com.ztune.libretune.core.TuneManager
 import com.ztune.libretune.core.git.TuneVersionControl
 import com.ztune.libretune.core.i18n.UnitPreferencesStore
-import com.ztune.libretune.core.ini.EcuDefinition
 import com.ztune.libretune.core.realtime.RealtimeChannelStore
-import com.ztune.libretune.core.realtime.RealtimeDecoder
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -63,31 +61,6 @@ object AppModule {
         return RealtimeChannelStore()
     }
 
-    /**
-     * Provide a singleton [RealtimeDecoder] bound to a default (empty) [EcuDefinition].
-     *
-     * The decoder is intrinsically per-connection (it depends on the active
-     * [EcuDefinition]); this provider only satisfies compile-time DI graph
-     * resolution for singleton consumers like [TuneManager].
-     *
-     * IMPORTANT: We deliberately inline the `EcuDefinition.default()` call
-     * here instead of exposing it as a separate `@Provides` method.
-     * Exposing `EcuDefinition` as a Hilt binding caused a
-     * `Dagger/MissingBinding` error in `:app:hiltJavaCompileDebug` because
-     * Hilt's component scanner failed to pick up the standalone provider
-     * (likely a KSP caching quirk). Inlining the construction side-steps
-     * that issue entirely.
-     *
-     * Callers that need a decoder for the *current* ECU connection should
-     * construct one explicitly via `RealtimeDecoder(connectionManager
-     * .activeDefinition!!)` rather than injecting this default instance.
-     */
-    @Provides
-    @Singleton
-    fun provideRealtimeDecoder(): RealtimeDecoder {
-        return RealtimeDecoder(EcuDefinition.default())
-    }
-
     // ------------------------------------------------------------------
     //  Core managers
     // ------------------------------------------------------------------
@@ -112,10 +85,11 @@ object AppModule {
     @Provides
     @Singleton
     fun provideTuneManager(
-        @ApplicationContext context: Context,
-        decoder: RealtimeDecoder
+        @ApplicationContext context: Context
     ): TuneManager {
-        return TuneManager(context, decoder)
+        // TuneManager no longer takes a RealtimeDecoder — it constructs one
+        // per-call from the active definition, avoiding the stale-decoder bug.
+        return TuneManager(context)
     }
 
     @Provides

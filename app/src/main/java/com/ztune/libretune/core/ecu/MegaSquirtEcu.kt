@@ -2,16 +2,25 @@ package com.ztune.libretune.core.ecu
 
 import com.ztune.libretune.core.ini.EcuDefinition
 import com.ztune.libretune.core.ini.types.EcuType
+import com.ztune.libretune.core.protocol.ms.MsConstants
 import com.ztune.libretune.core.protocol.ms.MsProtocolClient
+import com.ztune.libretune.core.protocol.ms.ProtocolMode
+import com.ztune.libretune.core.util.runCatchingCancellable
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
 /**
- * MegaSquirt ECU implementation using the msEnvelope protocol.
+ * MegaSquirt ECU implementation using the RAW MS serial protocol.
  *
  * This is the primary ECU backend for MS1, MS2, and MS3 variants.
- * All communication goes through [MsProtocolClient] which handles the
- * 0x5A header framing, 0x7D byte-stuffing, and CRC-16 integrity checks.
+ * Communication goes through [MsProtocolClient] in [ProtocolMode.RAW]:
+ *   - No framing (no 0x5A header, no byte-stuffing, no CRC)
+ *   - Commands: `Q` (signature), `A` (realtime), `r` (read), `w` (write), `B` (burn), `c` (reset)
+ *   - Big-endian offset encoding (MS MCU MC9S12 is big-endian)
+ *
+ * This matches what real MegaSquirt firmware expects over a direct serial
+ * connection. The previous implementation used TS-BP framing (0x5A + CRC-16)
+ * which is the rusEFI/FOME protocol, NOT the MS raw serial protocol.
  */
 class MegaSquirtEcu : EcuInterface {
     override val ecuType = EcuType.MEGASQUIRT
@@ -42,11 +51,12 @@ class MegaSquirtEcu : EcuInterface {
     override suspend fun connect(
         transport: EcuTransport,
         definition: EcuDefinition
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = runCatchingCancellable {
         transport.connect()
         this.transport = transport
         this.definition = definition
-        protocolClient = MsProtocolClient(transport)
+        // RAW mode: no framing, no CRC, big-endian offset — correct for real MS hardware
+        protocolClient = MsProtocolClient(transport, ProtocolMode.RAW)
 
         // Query signature to verify the connection and firmware match.
         val sig = protocolClient!!.querySignature().getOrThrow()
@@ -93,18 +103,23 @@ class MegaSquirtEcu : EcuInterface {
     }
 
     override suspend fun burnPage(page: Int): Result<Unit> {
-        // TODO: pass page-specific burn command overrides from the INI definition
-        // when ProtocolSettings.burnCommand is populated.
         return protocolClient?.burnPage()
             ?: Result.failure(TransportException("Not connected"))
     }
 
     override suspend fun readRealtimeData(): Result<ByteArray> {
-        // MS protocol: send 'S' (0x53) to request a single real-time data burst.
-        // The ECU responds with a framed payload containing all output channels.
+        // MS protocol: send 'A' (0x41) to request a real-time data burst.
+        // The ECU responds with a raw payload containing all output channels
+        // (layout defined by the INI [OutputChannels] section).
+        //
+        // Previous code used 'S' (0x53) which is incorrect — 'S' is not a
+        // standard MS realtime command. 'A' is the correct command for
+        // MS1/MS2/MS3 firmware.
         val client = protocolClient
             ?: return Result.failure(TransportException("Not connected"))
-        return client.sendCommand('S'.code.toByte())
+        // expectedResponseLength=0 → read until timeout gap (realtime block
+        // size varies by firmware; the decoder handles variable length)
+        return client.sendCommand(MsConstants.CMD_REALTIME, expectedResponseLength = 0)
     }
 
     override suspend fun sendControllerCommand(
@@ -127,7 +142,7 @@ class MegaSquirtEcu : EcuInterface {
                         _realtimeUpdates.emit(RealtimeUpdate(rawData = data))
                     }
                 } catch (e: CancellationException) {
-                    throw e // re-throw so coroutine cancellation propagates
+                    throw e
                 } catch (_: Exception) {
                     // Individual read failures are swallowed; the loop retries.
                 }

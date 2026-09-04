@@ -21,11 +21,12 @@ import com.ztune.libretune.core.tune.TuneSerializer
  *
  * All mutations (updateConstant, updateTableCell, updateCurveValue) encode the
  * display value back into raw bytes in the page data buffer and mark the tune
- * as dirty. The [RealtimeDecoder] handles the encode/decode transform.
+ * as dirty. A [RealtimeDecoder] is constructed per-call with the current
+ * [activeDefinition] — this avoids the stale-decoder bug where a singleton
+ * decoder bound to an empty definition was used for all encode/decode.
  */
 class TuneManager(
-    private val context: Context,
-    private val decoder: RealtimeDecoder
+    private val context: Context
 ) {
     // ----------------------------------------------------------------------
     // State
@@ -58,6 +59,12 @@ class TuneManager(
         activeDefinition = definition
         isDirty = false
 
+        // ---- Phase 5: Construct decoder with the CURRENT definition ----
+        // Previously this used the stale singleton decoder from AppModule
+        // which was bound to EcuDefinition.default() (empty). That caused
+        // all encode/decode operations to use wrong scales/offsets.
+        val activeDecoder = RealtimeDecoder(definition)
+
         val pageData = splitIntoPages(memoryBytes, definition)
         val constantValues = mutableMapOf<String, Double>()
         val tableValues = mutableMapOf<String, List<List<Double>>>()
@@ -67,19 +74,19 @@ class TuneManager(
         for ((name, constant) in definition.constants) {
             if (constant.isPcVariable) continue
             val pageBytes = pageData[constant.page] ?: continue
-            constantValues[name] = decoder.decodeConstant(name, pageBytes, constant)
+            constantValues[name] = activeDecoder.decodeConstant(name, pageBytes, constant)
         }
 
         // Decode tables
         for ((name, table) in definition.tables) {
             val pageBytes = pageData[table.valuesPage] ?: pageData[table.page] ?: continue
-            tableValues[name] = decoder.decodeTable(pageBytes, table)
+            tableValues[name] = activeDecoder.decodeTable(pageBytes, table)
         }
 
         // Decode curves
         for ((name, curve) in definition.curves) {
             val pageBytes = pageData[curve.valuesPage] ?: continue
-            curveValues[name] = decoder.decodeCurve(pageBytes, curve)
+            curveValues[name] = activeDecoder.decodeCurve(pageBytes, curve)
         }
 
         // Build constant manifest for later validation
@@ -202,10 +209,15 @@ class TuneManager(
     /**
      * Update a constant's display value, encode it back into page data.
      *
+     * Validates that the encoded raw value fits within the constant's [DataType]
+     * range before writing.
+     *
      * @param name  Constant name (must exist in the active definition).
      * @param value New display (scaled) value.
      * @throws IllegalStateException if no tune is loaded or the constant is
      *   unknown.
+     * @throws IllegalArgumentException if the value is out of the data type's
+     *   representable range.
      */
     fun updateConstant(name: String, value: Double) {
         val tune = currentTune
@@ -215,11 +227,21 @@ class TuneManager(
         val constant = def.constants[name]
             ?: throw IllegalArgumentException("Unknown constant: $name")
 
+        // ---- Phase 5: Validate raw value fits data type range ----
+        val raw = (value - constant.translate) / constant.scale
+        require(constant.dataType.isInRange(raw)) {
+            "Value $value encodes to raw $raw which is outside ${constant.dataType} range " +
+                "[${constant.dataType.rawMin}, ${constant.dataType.rawMax}]"
+        }
+
         val page = constant.page
         val pageBytes = tune.pageData[page]?.toMutableByteArray()
             ?: throw IllegalStateException("Page $page data not available")
 
-        val encoded = decoder.encodeConstant(value, constant)
+        // Construct a decoder with the CURRENT active definition, not the stale
+        // singleton from AppModule.
+        val activeDecoder = RealtimeDecoder(def)
+        val encoded = activeDecoder.encodeConstant(value, constant)
         require(encoded.size <= pageBytes.size - constant.offset) {
             "Encoded value overflows page bounds at offset ${constant.offset}"
         }
@@ -237,10 +259,16 @@ class TuneManager(
     /**
      * Update a single table cell, encode it back into page data.
      *
+     * Validates that the encoded raw value fits within the table's [DataType]
+     * range before writing. This prevents silent overflow/truncation that
+     * could corrupt the ECU's fuel/ignition tables.
+     *
      * @param tableName Table name (must exist in the active definition).
      * @param row       Zero-based row index.
      * @param col       Zero-based column index.
      * @param value     New display (scaled) value.
+     * @throws IllegalArgumentException if the value is out of the data type's
+     *   representable range, or if the row/col is out of bounds.
      */
     fun updateTableCell(tableName: String, row: Int, col: Int, value: Double) {
         val tune = currentTune
@@ -253,12 +281,18 @@ class TuneManager(
         require(row in 0 until table.rows) { "Row $row out of range [0, ${table.rows})" }
         require(col in 0 until table.cols) { "Col $col out of range [0, ${table.cols})" }
 
+        // ---- Phase 5: Validate raw value fits data type range ----
+        val raw = (value - table.translate) / table.scale
+        require(table.dataType.isInRange(raw)) {
+            "Value $value encodes to raw $raw which is outside ${table.dataType} range " +
+                "[${table.dataType.rawMin}, ${table.dataType.rawMax}]"
+        }
+
         val page = table.valuesPage
         val pageBytes = tune.pageData[page]?.toMutableByteArray()
             ?: throw IllegalStateException("Page $page data not available")
 
         val cellOffset = table.valuesOffset + (row * table.cols + col) * table.dataType.byteSize
-        val raw = (value - table.translate) / table.scale
         val writer = ByteOrderWriter(table.dataType.byteSize, def.endianness)
         writer.writeValue(table.dataType, raw)
         val encoded = writer.toByteArray()
@@ -280,9 +314,14 @@ class TuneManager(
     /**
      * Update a single curve value, encode it back into page data.
      *
+     * Validates that the encoded raw value fits within the curve's [DataType]
+     * range before writing.
+     *
      * @param curveName Curve name (must exist in the active definition).
      * @param index     Zero-based bin index.
      * @param value     New display (scaled) value.
+     * @throws IllegalArgumentException if the value is out of the data type's
+     *   representable range, or if the index is out of bounds.
      */
     fun updateCurveValue(curveName: String, index: Int, value: Double) {
         val tune = currentTune
@@ -296,12 +335,18 @@ class TuneManager(
             "Index $index out of range [0, ${curve.size})"
         }
 
+        // ---- Phase 5: Validate raw value fits data type range ----
+        val raw = (value - curve.translate) / curve.scale
+        require(curve.dataType.isInRange(raw)) {
+            "Value $value encodes to raw $raw which is outside ${curve.dataType} range " +
+                "[${curve.dataType.rawMin}, ${curve.dataType.rawMax}]"
+        }
+
         val page = curve.valuesPage
         val pageBytes = tune.pageData[page]?.toMutableByteArray()
             ?: throw IllegalStateException("Page $page data not available")
 
         val binOffset = curve.valuesOffset + index * curve.dataType.byteSize
-        val raw = (value - curve.translate) / curve.scale
         val writer = ByteOrderWriter(curve.dataType.byteSize, def.endianness)
         writer.writeValue(curve.dataType, raw)
         val encoded = writer.toByteArray()

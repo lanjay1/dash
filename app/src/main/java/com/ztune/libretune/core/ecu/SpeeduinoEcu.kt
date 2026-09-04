@@ -2,24 +2,26 @@ package com.ztune.libretune.core.ecu
 
 import com.ztune.libretune.core.ini.EcuDefinition
 import com.ztune.libretune.core.ini.types.EcuType
+import com.ztune.libretune.core.protocol.ms.MsConstants
 import com.ztune.libretune.core.protocol.ms.MsProtocolClient
+import com.ztune.libretune.core.protocol.ms.ProtocolMode
+import com.ztune.libretune.core.util.runCatchingCancellable
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
 /**
  * Speeduino ECU implementation.
  *
- * Speeduino uses a protocol that is largely compatible with the MegaSquirt
- * serial protocol (same 0x5A framing, CRC-16, command set) but with some
- * differences:
+ * Speeduino uses a protocol that is compatible with the MegaSquirt RAW serial
+ * protocol (same command set, no framing, no CRC, big-endian offset).
  *
+ * Differences from MS:
  * - Different real-time data layout and output channel offsets.
- * - The 'A' command is used for real-time data instead of 'S' on some firmware versions.
+ * - The 'A' command is used for real-time data on firmware ≥ 0.4.x.
  * - Block sizes and page layouts follow Speeduino-specific conventions.
  *
- * For now this extends [MegaSquirtEcu] and overrides only the parts that
- * differ.  As Speeduino's protocol diverges further, more overrides will be
- * added here.
+ * Uses [MsProtocolClient] in [ProtocolMode.RAW] mode — correct for real
+ * Speeduino hardware over direct serial connection.
  */
 class SpeeduinoEcu : EcuInterface {
     override val ecuType = EcuType.SPEEDUINO
@@ -41,14 +43,6 @@ class SpeeduinoEcu : EcuInterface {
     companion object {
         /** Speeduino supports higher streaming rates; default to ~50 Hz. */
         private const val STREAM_INTERVAL_MS = 20L
-
-        /**
-         * Speeduino firmware ≥ 0.4.x uses 'A' for the real-time data command.
-         * Older builds use 'S' like MegaSquirt.  The INI definition's
-         * [EcuDefinition.queryCommand] determines which one to use.
-         */
-        private const val CMD_REALTIME_LEGACY: Byte = 'S'.code.toByte()
-        private const val CMD_REALTIME_CURRENT: Byte = 'A'.code.toByte()
     }
 
     // ==================================================================
@@ -58,11 +52,12 @@ class SpeeduinoEcu : EcuInterface {
     override suspend fun connect(
         transport: EcuTransport,
         definition: EcuDefinition
-    ): Result<Unit> = runCatching {
+    ): Result<Unit> = runCatchingCancellable {
         transport.connect()
         this.transport = transport
         this.definition = definition
-        protocolClient = MsProtocolClient(transport)
+        // RAW mode: no framing, no CRC, big-endian offset — correct for Speeduino
+        protocolClient = MsProtocolClient(transport, ProtocolMode.RAW)
 
         // Verify signature.
         val sig = protocolClient!!.querySignature().getOrThrow()
@@ -112,17 +107,15 @@ class SpeeduinoEcu : EcuInterface {
     }
 
     override suspend fun readRealtimeData(): Result<ByteArray> {
+        // Speeduino uses 'A' (0x41) for real-time data on firmware ≥ 0.4.x.
+        // The INI queryCommand field can override this if needed.
         val client = protocolClient
             ?: return Result.failure(TransportException("Not connected"))
-
-        // Speeduino newer firmware uses 'A' command; fall back to 'S' for
-        // legacy firmware versions.  The INI queryCommand field can also
-        // override this.
         val cmd = when (definition?.queryCommand?.uppercase()) {
-            "A" -> CMD_REALTIME_CURRENT
-            else -> CMD_REALTIME_LEGACY
+            "S" -> 'S'.code.toByte() // legacy fallback
+            else -> MsConstants.CMD_REALTIME // 'A' — default for modern Speeduino
         }
-        return client.sendCommand(cmd)
+        return client.sendCommand(cmd, expectedResponseLength = 0)
     }
 
     override suspend fun sendControllerCommand(

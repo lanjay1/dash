@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    USB device filter for auto-launch when ECU is plugged in.
+
+    This is intentionally EMPTY (no vendor-id/product-id filters) so that
+    ANY USB device triggers the USB_DEVICE_ATTACHED intent. The user will
+    see ZTune in the "Open with" dialog when plugging in any USB serial
+    adapter (FTDI/CH340/CP2102/PL2303/etc.) or ECU.
+
+    If you want to restrict auto-launch to specific devices, add
+    <usb-device vendor-id="..." product-id="..." /> entries here.
+    Common USB-serial adapter IDs:
+      FTDI FT232:        vendor-id="1027"  product-id="24577"  (0x0403 / 0x6001)
+      Prolific PL2303:   vendor-id="1659"  product-id="8963"   (0x067B / 0x2303)
+      CH340/CH341:       vendor-id="6790"  product-id="29987"  (0x1A86 / 0x7523)
+      CP2102:            vendor-id="4292"  product-id="60000"  (0x10C4 / 0xEA60)
+-->
+<resources>
+    <!-- Empty filter: match all USB devices -->
+    <usb-device />
+</resources>
