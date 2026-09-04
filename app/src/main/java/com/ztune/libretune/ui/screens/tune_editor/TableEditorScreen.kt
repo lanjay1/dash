@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -63,6 +64,8 @@ fun TableEditorScreen(
     viewModel: TableEditorViewModel = hiltViewModel()
 ) {
     val state by viewModel.uiState.collectAsState()
+    var showCellEditor by remember { mutableStateOf(false) }
+    var showBurnDialog by remember { mutableStateOf(false) }
 
     // Load table data once when the table name changes.
     LaunchedEffect(tableName) {
@@ -141,6 +144,28 @@ fun TableEditorScreen(
                     Icon(
                         Icons.AutoMirrored.Filled.Redo,
                         contentDescription = "Redo"
+                    )
+                }
+                // Burn button — visible when table is modified
+                if (state.isModified || state.isBurning) {
+                    IconButton(
+                        onClick = { showBurnDialog = true },
+                        enabled = !state.isBurning
+                    ) {
+                        Icon(
+                            Icons.Default.LocalFireDepartment,
+                            contentDescription = "Burn to ECU",
+                            tint = if (state.isBurning) MaterialTheme.colorScheme.onSurfaceVariant
+                                   else MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+                // Burn error indicator
+                state.burnError?.let { error ->
+                    Text(
+                        text = "!",
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(end = 8.dp)
                     )
                 }
             },
@@ -278,6 +303,54 @@ fun TableEditorScreen(
                 viewModel.setCellValue(editingRow, editingCol, newValue)
                 showEditDialog = false
             }
+        )
+    }
+
+    // ======================================================================
+    //  Burn confirmation dialog
+    // ======================================================================
+    if (showBurnDialog) {
+        AlertDialog(
+            onDismissRequest = { showBurnDialog = false },
+            title = { Text("Burn to ECU") },
+            text = {
+                Column {
+                    Text("This will write the modified table to ECU flash memory.")
+                    Spacer(Modifier.height(8.dp))
+                    Text("The operation will:")
+                    Text("• Back up current data", style = MaterialTheme.typography.bodySmall)
+                    Text("• Write new values to ECU RAM", style = MaterialTheme.typography.bodySmall)
+                    Text("• Verify the write (byte-for-byte)", style = MaterialTheme.typography.bodySmall)
+                    Text("• Burn to flash if verification passes", style = MaterialTheme.typography.bodySmall)
+                    Text("• Restore backup if verification fails", style = MaterialTheme.typography.bodySmall)
+                    if (state.isBurning) {
+                        Spacer(Modifier.height(12.dp))
+                        Text("Burning... please wait", color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.burnTable()
+                        showBurnDialog = false
+                    },
+                    enabled = !state.isBurning
+                ) { Text("Burn", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBurnDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Burn error display
+    state.burnError?.let { error ->
+        AlertDialog(
+            onDismissRequest = { /* dismissed by VM state change */ },
+            title = { Text("Burn Failed") },
+            text = { Text(error) },
+            confirmButton = { TextButton(onClick = { showBurnDialog = false }) { Text("OK") } }
         )
     }
 }
