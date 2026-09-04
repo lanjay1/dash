@@ -254,6 +254,118 @@ fun SettingsScreen(
                 }
             }
 
+            // ======== Units ========
+            SectionHeader(title = stringResource(R.string.settings_units))
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(R.string.settings_temperature),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    UnitSegmentedButtons(
+                        options = listOf("°C", "°F", "K"),
+                        selected = uiState.temperatureUnit,
+                        onSelect = { viewModel.setTemperatureUnit(it) }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(R.string.settings_pressure),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    UnitSegmentedButtons(
+                        options = listOf("kPa", "PSI", "bar", "inHg"),
+                        selected = uiState.pressureUnit,
+                        onSelect = { viewModel.setPressureUnit(it) }
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(stringResource(R.string.settings_afr_lambda),
+                            style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Switch(checked = uiState.useLambda,
+                            onCheckedChange = { viewModel.setUseLambda(it) })
+                    }
+                }
+            }
+
+            // ======== Table Editor ========
+            SectionHeader(title = "Table Editor")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Auto-save on edit", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Switch(checked = uiState.autoSaveTables, onCheckedChange = { viewModel.setAutoSaveTables(it) })
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Show 3D view", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Switch(checked = uiState.show3DView, onCheckedChange = { viewModel.setShow3DView(it) })
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Cell color heatmap", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Switch(checked = uiState.cellHeatmap, onCheckedChange = { viewModel.setCellHeatmap(it) })
+                    }
+                    Text("Decimal precision", style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Slider(value = uiState.decimalPrecision.toFloat(),
+                        onValueChange = { viewModel.setDecimalPrecision(it.toInt()) },
+                        valueRange = 0f..4f, steps = 3)
+                    Text("${uiState.decimalPrecision} decimals", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            // ======== Datalogging ========
+            SectionHeader(title = "Datalogging")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Sample rate", style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Slider(value = uiState.datalogSampleRate.toFloat(),
+                        onValueChange = { viewModel.setDatalogSampleRate(it.toInt()) },
+                        valueRange = 1f..100f, steps = 98)
+                    Text("${uiState.datalogSampleRate} Hz", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(4.dp))
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Auto-record on connect", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Switch(checked = uiState.autoRecordDatalog, onCheckedChange = { viewModel.setAutoRecordDatalog(it) })
+                    }
+                }
+            }
+
+            // ======== AutoTune ========
+            SectionHeader(title = "AutoTune")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Default authority limit", style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Slider(value = uiState.autoTuneAuthority.toFloat(),
+                        onValueChange = { viewModel.setAutoTuneAuthority(it.toInt()) },
+                        valueRange = 1f..30f, steps = 28)
+                    Text("${uiState.autoTuneAuthority}%", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(4.dp))
+                    Text("Lambda delay (ms)", style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Slider(value = uiState.lambdaDelayMs.toFloat(),
+                        onValueChange = { viewModel.setLambdaDelay(it.toLong()) },
+                        valueRange = 0f..1000f, steps = 99)
+                    Text("${uiState.lambdaDelayMs} ms", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            // ======== Developer ========
+            SectionHeader(title = "Developer / Debug")
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Show debug overlay", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Switch(checked = uiState.showDebugOverlay, onCheckedChange = { viewModel.setShowDebugOverlay(it) })
+                    }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text("Verbose logging", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Switch(checked = uiState.verboseLogging, onCheckedChange = { viewModel.setVerboseLogging(it) })
+                    }
+                    OutlinedButton(onClick = { viewModel.exportSettings() }, modifier = Modifier.fillMaxWidth()) {
+                        Text("Export Debug Info")
+                    }
+                }
+            }
+
             // ======== About ========
             SectionHeader(title = "About")
             Card(modifier = Modifier.fillMaxWidth()) {
@@ -379,6 +491,26 @@ private fun BaudRateDropdown(
                         expanded = false
                     }
                 )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UnitSegmentedButtons(
+    options: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit
+) {
+    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, option ->
+            SegmentedButton(
+                selected = selected == option,
+                onClick = { onSelect(option) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size)
+            ) {
+                Text(option)
             }
         }
     }

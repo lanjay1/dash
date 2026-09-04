@@ -41,7 +41,25 @@ data class SettingsUiState(
     val appVersionName: String = "",
     val appVersionCode: Long = 0L,
     val exportSuccess: String? = null,
-    val exportError: String? = null
+    val exportError: String? = null,
+    // Units
+    val temperatureUnit: String = "°C",
+    val pressureUnit: String = "kPa",
+    val useLambda: Boolean = false,
+    // Table Editor
+    val autoSaveTables: Boolean = false,
+    val show3DView: Boolean = false,
+    val cellHeatmap: Boolean = true,
+    val decimalPrecision: Int = 1,
+    // Datalogging
+    val datalogSampleRate: Int = 50,
+    val autoRecordDatalog: Boolean = false,
+    // AutoTune
+    val autoTuneAuthority: Int = 10,
+    val lambdaDelayMs: Long = 200,
+    // Developer
+    val showDebugOverlay: Boolean = false,
+    val verboseLogging: Boolean = false
 )
 
 @HiltViewModel
@@ -150,6 +168,29 @@ class SettingsViewModel @Inject constructor(
     fun dismissMessages() {
         _uiState.update { it.copy(exportSuccess = null, exportError = null) }
     }
+
+    // ===== Units setters =====
+    fun setTemperatureUnit(unit: String) = _uiState.update { it.copy(temperatureUnit = unit) }
+    fun setPressureUnit(unit: String) = _uiState.update { it.copy(pressureUnit = unit) }
+    fun setUseLambda(value: Boolean) = _uiState.update { it.copy(useLambda = value) }
+
+    // ===== Table Editor setters =====
+    fun setAutoSaveTables(value: Boolean) = _uiState.update { it.copy(autoSaveTables = value) }
+    fun setShow3DView(value: Boolean) = _uiState.update { it.copy(show3DView = value) }
+    fun setCellHeatmap(value: Boolean) = _uiState.update { it.copy(cellHeatmap = value) }
+    fun setDecimalPrecision(value: Int) = _uiState.update { it.copy(decimalPrecision = value) }
+
+    // ===== Datalogging setters =====
+    fun setDatalogSampleRate(value: Int) = _uiState.update { it.copy(datalogSampleRate = value) }
+    fun setAutoRecordDatalog(value: Boolean) = _uiState.update { it.copy(autoRecordDatalog = value) }
+
+    // ===== AutoTune setters =====
+    fun setAutoTuneAuthority(value: Int) = _uiState.update { it.copy(autoTuneAuthority = value) }
+    fun setLambdaDelay(value: Long) = _uiState.update { it.copy(lambdaDelayMs = value) }
+
+    // ===== Developer setters =====
+    fun setShowDebugOverlay(value: Boolean) = _uiState.update { it.copy(showDebugOverlay = value) }
+    fun setVerboseLogging(value: Boolean) = _uiState.update { it.copy(verboseLogging = value) }
 
     // ========================================================================
     //  Helpers
