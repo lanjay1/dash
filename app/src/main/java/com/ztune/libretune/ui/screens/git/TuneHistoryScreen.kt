@@ -43,13 +43,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.ztune.libretune.core.git.ChangedValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TuneHistoryScreen(
-    vm: TuneHistoryViewModel = viewModel(),
+    vm: TuneHistoryViewModel = hiltViewModel(),
     onNavigateBack: () -> Unit = {},
     onTuneRestored: () -> Unit = {},
 ) {

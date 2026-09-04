@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ZTUNE</string>
+
+    <!-- Navigation labels -->
+    <string name="nav_home">Beranda</string>
+    <string name="nav_dashboard">Dashboard</string>
+    <string name="nav_tune_editor">Tune</string>
+    <string name="nav_datalog">Datalog</string>
+    <string name="nav_settings">Pengaturan</string>
+    <string name="nav_calibration">Kalibrasi</string>
+    <string name="nav_tools">Alat</string>
+
+    <!-- Connection -->
+    <string name="conn_title">Koneksi ECU</string>
+    <string name="conn_status_disconnected">Terputus</string>
+    <string name="conn_status_connecting">Menghubungkan…</string>
+    <string name="conn_status_connected">Terhubung</string>
+    <string name="conn_status_error">Error</string>
+    <string name="conn_status_reconnecting">Menghubungkan ulang…</string>
+    <string name="conn_disconnect">Putuskan</string>
+    <string name="conn_no_devices">Tidak ada perangkat USB serial terdeteksi. Hubungkan ECU via USB-OTG dan coba lagi.</string>
+    <string name="conn_demo_button">Hubungkan Demo ECU</string>
+    <string name="conn_devices_section">Perangkat USB</string>
+
+    <!-- Home -->
+    <string name="home_title">ZTUNE</string>
+    <string name="home_subtitle">ECU tuning open-source untuk Android.</string>
+    <string name="home_connection_title">Status ECU</string>
+    <string name="home_not_connected">Belum terhubung — hubungkan ECU via USB-OTG atau gunakan mode demo.</string>
+    <string name="home_connected">Terhubung: %1$s</string>
+    <string name="home_action_connect">Hubungkan ECU</string>
+    <string name="home_action_dashboard">Buka Dashboard</string>
+    <string name="home_action_tune">Buka Editor Tune</string>
+
+    <!-- Dashboard -->
+    <string name="dash_title">Dashboard</string>
+    <string name="dash_subtitle">Gauge real-time dari output channel ECU.</string>
+    <string name="dash_start_stream">Mulai Streaming</string>
+    <string name="dash_stop_stream">Hentikan Streaming</string>
+    <string name="dash_not_connected">Tidak terhubung ke ECU</string>
+    <string name="dash_connect_hint">Hubungkan ECU via USB-OTG atau gunakan mode demo, lalu kembali ke sini.</string>
+
+    <!-- Tune Editor -->
+    <string name="tune_title">Editor Tune</string>
+    <string name="tune_subtitle">Edit tabel VE, pengapian, dan lainnya.</string>
+    <string name="tune_not_connected">Tidak terhubung ke ECU — editor butuh data page.</string>
+    <string name="tune_connect_hint">Hubungkan ECU atau gunakan mode Demo, lalu kembali.</string>
+    <string name="tune_load_page">Muat Page dari ECU</string>
+
+    <!-- Datalog -->
+    <string name="dl_title">Datalog</string>
+    <string name="dl_subtitle">Rekam data ECU dan ekspor log CSV.</string>
+    <string name="dl_start">Mulai Rekam</string>
+    <string name="dl_stop">Berhenti &amp; Simpan</string>
+    <string name="dl_not_connected">Koneksi ECU diperlukan untuk merekam.</string>
+
+    <!-- Calibration -->
+    <string name="cal_title">Kalibrasi Sensor</string>
+    <string name="cal_tps">Kalibrasi TPS</string>
+    <string name="cal_afr">Kalibrasi AFR</string>
+    <string name="cal_clt">Kalibrasi CLT</string>
+    <string name="cal_iat">Kalibrasi IAT</string>
+    <string name="cal_map">Kalibrasi MAP</string>
+    <string name="cal_baro">Kalibrasi Baro</string>
+
+    <!-- AutoTune -->
+    <string name="at_title">AutoTune</string>
+    <string name="at_start">Mulai AutoTune</string>
+    <string name="at_stop">Berhenti</string>
+    <string name="at_send">Kirim Rekomendasi</string>
+    <string name="at_settings">Pengaturan</string>
+
+    <!-- Lua Console -->
+    <string name="lua_title">Konsol Lua</string>
+    <string name="lua_execute">Eksekusi</string>
+    <string name="lua_clear">Bersihkan</string>
+
+    <!-- Tune History -->
+    <string name="th_title">Riwayat Tune</string>
+    <string name="th_restore">Pulihkan</string>
+    <string name="th_prune">Hapus Lama</string>
+    <string name="th_diff">Lihat Perubahan</string>
+
+    <!-- VE Analysis -->
+    <string name="va_title">Analisis VE</string>
+    <string name="va_run">Jalankan Analisis</string>
+    <string name="va_apply">Terapkan ke Tabel</string>
+
+    <!-- Diagnostics -->
+    <string name="diag_tooth_logger">Tooth Logger</string>
+    <string name="diag_console">Konsol ECU</string>
+
+    <!-- Curve Editor -->
+    <string name="ce_title">Editor Kurva</string>
+    <string name="ce_smooth">Haluskan</string>
+    <string name="ce_interpolate">Interpolasi</string>
+
+    <!-- Tools -->
+    <string name="tools_lua">Konsol Lua</string>
+    <string name="tools_history">Riwayat Tune</string>
+    <string name="tools_analysis">Analisis VE</string>
+    <string name="tools_tooth">Tooth Logger</string>
+    <string name="tools_console">Konsol ECU</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Pengaturan</string>
+    <string name="settings_appearance">Tampilan</string>
+    <string name="settings_theme">Tema</string>
+    <string name="theme_system">Ikuti sistem</string>
+    <string name="theme_light">Terang</string>
+    <string name="theme_dark">Gelap</string>
+    <string name="settings_usb_section">Koneksi USB</string>
+    <string name="settings_usb_baud">Baud rate</string>
+    <string name="settings_reconnect_section">Auto-reconnect</string>
+    <string name="settings_auto_reconnect">Hubungkan ulang otomatis saat putus</string>
+    <string name="settings_max_attempts">Maks percobaan</string>
+    <string name="settings_delay">Jeda antar percobaan</string>
+    <string name="settings_delay_fmt">%1$d ms</string>
+    <string name="settings_units">Satuan</string>
+    <string name="settings_temperature">Suhu</string>
+    <string name="settings_pressure">Tekanan</string>
+    <string name="settings_afr_lambda">Tampilkan sebagai Lambda</string>
+    <string name="settings_transport">Transport</string>
+    <string name="settings_bluetooth">Bluetooth</string>
+    <string name="settings_tcp">TCP / WiFi</string>
+    <string name="settings_version">Versi</string>
+
+    <!-- Dialog -->
+    <string name="dialog_save">Simpan</string>
+    <string name="dialog_cancel">Batal</string>
+    <string name="dialog_ok">OK</string>
+    <string name="dialog_discard">Buang</string>
+    <string name="dialog_confirm_restore">Pulihkan snapshot tune ini? Perubahan yang belum disimpan akan hilang.</string>
+    <string name="dialog_prune_confirm">Hapus snapshot tune lama di luar batas?</string>
+
+    <!-- Help -->
+    <string name="help_title">Bantuan</string>
+    <string name="help_no_topic">Tidak ada topik bantuan tersedia.</string>
+</resources>

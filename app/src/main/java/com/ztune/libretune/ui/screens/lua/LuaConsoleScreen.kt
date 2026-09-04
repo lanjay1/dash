@@ -18,13 +18,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LuaConsoleScreen(
     onBack: () -> Unit,
-    vm: LuaConsoleViewModel = viewModel()
+    vm: LuaConsoleViewModel = hiltViewModel()
 ) {
     val isDark = isSystemInDarkTheme()
     val outputScrollState = rememberScrollState()

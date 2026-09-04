@@ -6,12 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.ztune.libretune.core.datalog.DataLogPlayback
 import com.ztune.libretune.core.datalog.DataLogSession
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import javax.inject.Inject
 
@@ -93,8 +95,14 @@ class DatalogChartViewModel @Inject constructor(
     fun loadFile(filePath: String) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, loadError = null)
-            val playback = DataLogPlayback(File(filePath))
-            val result = playback.load()
+
+            // Phase 4 fix: Move blocking file I/O to Dispatchers.IO
+            val playback = withContext(Dispatchers.IO) {
+                DataLogPlayback(File(filePath))
+            }
+            val result = withContext(Dispatchers.IO) {
+                playback.load()
+            }
             if (result.isFailure) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,

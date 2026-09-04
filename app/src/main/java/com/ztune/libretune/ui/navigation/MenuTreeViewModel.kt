@@ -15,26 +15,19 @@ import androidx.compose.material.icons.outlined.Terminal
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ztune.libretune.core.EcuConnectionManager
 import com.ztune.libretune.core.ini.EcuDefinition
 import com.ztune.libretune.core.ini.types.Menu
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 enum class MenuNodeType {
-    FOLDER,
-    TABLE,
-    DIALOG,
-    DASHBOARD,
-    LOG,
-    HELP,
-    INDICATOR,
-    READOUT,
-    COMMAND,
-    CALIBRATION,
-    PORT_EDITOR,
-    CURVE
+    FOLDER, TABLE, DIALOG, DASHBOARD, LOG, HELP,
+    INDICATOR, READOUT, COMMAND, CALIBRATION, PORT_EDITOR, CURVE
 }
 
 data class MenuItemUi(
@@ -49,38 +42,59 @@ data class MenuItemUi(
 )
 
 /**
- * Plain (non-Hilt) ViewModel that builds a UI menu tree from an [EcuDefinition].
+ * Phase 30: Hilt-aware MenuTreeViewModel.
  *
- * Construct it directly via the primary constructor; pass an empty / default
- * [EcuDefinition] when no ECU is loaded yet.
+ * Observes [EcuConnectionManager.activeDefinition] reactively and rebuilds
+ * the menu tree whenever the definition changes (connect → disconnect →
+ * reconnect to different ECU).
+ *
+ * Previously this was a plain ViewModel constructed via `remember { MenuTreeViewModel() }`
+ * with no definition argument — so `menuTree` was always empty, `hasDefinition`
+ * was always false, and the drawer/topbar/bottombar never rendered. This
+ * made Settings and Datalog unreachable from the UI.
  */
-class MenuTreeViewModel(
-    definition: EcuDefinition? = null
+@HiltViewModel
+class MenuTreeViewModel @Inject constructor(
+    private val connectionManager: EcuConnectionManager
 ) : ViewModel() {
 
     private val _menuTree = MutableStateFlow<List<MenuItemUi>>(emptyList())
-    val menuTree: StateFlow<List<MenuItemUi>> = _menuTree
+    val menuTree: StateFlow<List<MenuItemUi>> = _menuTree.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
     private val _filteredTree = MutableStateFlow<List<MenuItemUi>>(emptyList())
-    val filteredTree: StateFlow<List<MenuItemUi>> = _filteredTree
+    val filteredTree: StateFlow<List<MenuItemUi>> = _filteredTree.asStateFlow()
 
     private val _searchResultCount = MutableStateFlow(0)
-    val searchResultCount: StateFlow<Int> = _searchResultCount
+    val searchResultCount: StateFlow<Int> = _searchResultCount.asStateFlow()
 
     private val _expandedIds = MutableStateFlow<Set<String>>(emptySet())
-    val expandedIds: StateFlow<Set<String>> = _expandedIds
+    val expandedIds: StateFlow<Set<String>> = _expandedIds.asStateFlow()
 
     private val allItems = mutableListOf<MenuItemUi>()
     private val searchableIndex = mutableMapOf<String, MenuItemUi>()
 
     init {
-        if (definition != null &&
-            (definition.tables.isNotEmpty() || definition.menus.isNotEmpty())) {
-            buildTree(definition)
+        // Observe activeDefinition reactively — rebuild menu tree on connect/disconnect
+        viewModelScope.launch {
+            connectionManager.state.collect { connState ->
+                val def = connectionManager.activeDefinition
+                if (def != null &&
+                    (def.tables.isNotEmpty() || def.menus.isNotEmpty())) {
+                    buildTree(def)
+                } else {
+                    // No definition — clear the menu tree
+                    _menuTree.value = emptyList()
+                    _filteredTree.value = emptyList()
+                    allItems.clear()
+                    searchableIndex.clear()
+                }
+            }
         }
+
+        // Search query observer
         viewModelScope.launch {
             searchQuery.collect { query ->
                 filterTree(query)
@@ -120,11 +134,13 @@ class MenuTreeViewModel(
                     if (tbl != null) MenuNodeType.TABLE else MenuNodeType.DIALOG
                 }
                 menu.dialogName != null -> {
-                    if (definition.dialogs.containsKey(menu.dialogName)) MenuNodeType.DIALOG
-                    else if (definition.indicatorPanels.containsKey(menu.dialogName)) MenuNodeType.INDICATOR
-                    else if (definition.readoutPanels.containsKey(menu.dialogName)) MenuNodeType.READOUT
-                    else if (definition.portEditors.containsKey(menu.dialogName)) MenuNodeType.PORT_EDITOR
-                    else MenuNodeType.DIALOG
+                    when {
+                        definition.dialogs.containsKey(menu.dialogName) -> MenuNodeType.DIALOG
+                        definition.indicatorPanels.containsKey(menu.dialogName) -> MenuNodeType.INDICATOR
+                        definition.readoutPanels.containsKey(menu.dialogName) -> MenuNodeType.READOUT
+                        definition.portEditors.containsKey(menu.dialogName) -> MenuNodeType.PORT_EDITOR
+                        else -> MenuNodeType.DIALOG
+                    }
                 }
                 menu.command.startsWith("calibration", ignoreCase = true) -> MenuNodeType.CALIBRATION
                 children.isNotEmpty() -> MenuNodeType.FOLDER
@@ -174,20 +190,16 @@ class MenuTreeViewModel(
             if (key.contains(q)) {
                 matchingIds.add(item.id)
                 directMatchCount++
-                // Add all ancestors by adding every node in the tree
                 addAncestors(matchingIds)
             }
         }
 
         _searchResultCount.value = directMatchCount
         _filteredTree.value = filterNodes(_menuTree.value, matchingIds)
-
-        // Expand all matching paths
         _expandedIds.value = matchingIds
     }
 
     private fun addAncestors(ids: MutableSet<String>) {
-        // Add every node so the tree path is preserved during search
         allItems.forEach { ids.add(it.id) }
     }
 
@@ -195,8 +207,8 @@ class MenuTreeViewModel(
         return nodes.mapNotNull { node ->
             if (node.id in matchIds) {
                 val filteredChildren = filterNodes(node.children, matchIds)
-                if (filteredChildren.isEmpty() && node.children.isNotEmpty() && node.children.none { it.id in matchIds }) {
-                    // Keep the node but strip children that don't match
+                if (filteredChildren.isEmpty() && node.children.isNotEmpty() &&
+                    node.children.none { it.id in matchIds }) {
                     node.copy(children = emptyList())
                 } else {
                     node.copy(children = filteredChildren)

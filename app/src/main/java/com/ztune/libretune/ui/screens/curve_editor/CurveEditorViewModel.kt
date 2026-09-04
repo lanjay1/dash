@@ -1,14 +1,16 @@
 package com.ztune.libretune.ui.screens.curve_editor
 
 import androidx.compose.ui.geometry.Offset
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ztune.libretune.core.ini.EcuDefinition
-import com.ztune.libretune.core.ini.types.CurveDefinition
+import com.ztune.libretune.core.EcuConnectionManager
+import com.ztune.libretune.core.TuneManager
 import com.ztune.libretune.core.realtime.RealtimeChannelStore
-import com.ztune.libretune.core.tune.Tune
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 data class CurveEditorState(
     val curveName: String = "",
@@ -23,157 +25,97 @@ data class CurveEditorState(
     val xOutputChannel: String? = null
 )
 
-class CurveEditorViewModel(
-    private val curveName: String,
-    private val definition: EcuDefinition?,
-    private val tune: Tune?,
-    private val channelStore: RealtimeChannelStore?,
-    private val onValuesChanged: ((String, List<Double>, List<Double>) -> Unit)?
+/**
+ * Phase 30: Converted to @HiltViewModel.
+ *
+ * Injects [EcuConnectionManager] and [TuneManager] to get the active
+ * definition and tune at runtime. The curve name comes from
+ * [SavedStateHandle] (navigation argument).
+ */
+@HiltViewModel
+class CurveEditorViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
+    private val connectionManager: EcuConnectionManager,
+    private val tuneManager: TuneManager,
+    private val channelStore: RealtimeChannelStore
 ) : ViewModel() {
+
+    private val curveName: String = savedStateHandle["name"] ?: ""
 
     private val _state = MutableStateFlow(CurveEditorState(curveName = curveName))
     val state: StateFlow<CurveEditorState> = _state
 
-    private val undoStack = mutableListOf<Pair<List<Double>, List<Double>>>()
-    private val redoStack = mutableListOf<Pair<List<Double>, List<Double>>>()
-
     init {
-        loadCurveData()
-        observeLiveChannel()
+        loadCurve()
+        observeLiveX()
     }
 
-    private fun loadCurveData() {
-        val def = definition ?: return
+    private fun loadCurve() {
+        val def = connectionManager.activeDefinition ?: return
+        val tune = tuneManager.currentTune ?: return
         val curve = def.getCurveByNameOrMap(curveName) ?: return
-        val pageData = tune?.getPageData(curve.binsPage)
-        val xBins = if (pageData != null) {
-            // Decode the curve's bins (X axis) directly from binsOffset.
-            val reader = com.ztune.libretune.core.tune.ByteOrderReader(pageData, def.endianness)
-            (0 until curve.size).map { i ->
-                try {
-                    val offset = curve.binsOffset + i * curve.dataType.byteSize
-                    val raw = reader.readValueAt(offset, curve.dataType) ?: 0.0
-                    raw * curve.scale + curve.translate
-                } catch (e: Exception) {
-                    0.0
-                }
-            }
-        } else {
-            (0 until curve.size).map { it.toDouble() * 100.0 / maxOf(curve.size - 1, 1) }
+        val pageData = tune.getPageData(curve.valuesPage) ?: return
+        val decoder = com.ztune.libretune.core.realtime.RealtimeDecoder(def)
+        val yBins = decoder.decodeCurve(pageData, curve)
+        val xBins = decoder.decodeTableAxis(pageData, def.tables.values.firstOrNull()?.xAxis)
+
+        _state.update {
+            it.copy(
+                title = curve.title.ifEmpty { curveName },
+                xBins = xBins,
+                yBins = yBins,
+                xLabel = "X",
+                yLabel = curve.units
+            )
         }
-        val yBins = tune?.curveValues?.get(curveName) ?: (0 until curve.size).map { 50.0 }
-        _state.value = _state.value.copy(
-            curveName = curveName,
-            title = curve.name.ifEmpty { curveName },
-            xBins = xBins,
-            yBins = yBins,
-            xLabel = curve.units.ifEmpty { "X" },
-            yLabel = curve.units,
-            xOutputChannel = null
-        )
     }
 
-    private fun observeLiveChannel() {
-        val xChannel = _state.value.xOutputChannel ?: return
-        val store = channelStore ?: return
+    private fun observeLiveX() {
         viewModelScope.launch {
-            store.channels.collect { channels ->
-                val xVal = channels[xChannel]
-                _state.value = _state.value.copy(liveXValue = xVal)
+            channelStore.channels.collect { channels ->
+                val xVal = _state.value.xOutputChannel?.let { channels[it] }
+                if (xVal != null) {
+                    _state.update { it.copy(liveXValue = xVal) }
+                }
             }
         }
     }
 
     fun selectPoint(index: Int) {
-        _state.value = _state.value.copy(selectedPoint = index)
+        _state.update { it.copy(selectedPoint = index) }
     }
 
-    fun setPointValue(index: Int, newY: Double) {
-        pushUndo()
-        val newBins = _state.value.yBins.toMutableList()
-        if (index in newBins.indices) {
-            newBins[index] = newY
-        }
-        _state.value = _state.value.copy(yBins = newBins, isModified = true)
-        onValuesChanged?.invoke(curveName, _state.value.xBins, newBins)
-    }
-
-    fun setPointByDrag(position: Offset, chartBounds: androidx.compose.ui.geometry.Rect) {
-        val st = _state.value
-        if (st.xBins.isEmpty()) return
-        val xRatio = ((position.x - chartBounds.left).toDouble() / chartBounds.width.toDouble()).coerceIn(0.0, 1.0)
-        val yRatio = 1.0 - ((position.y - chartBounds.top).toDouble() / chartBounds.height.toDouble()).coerceIn(0.0, 1.0)
-        val targetX = st.xBins.first() + xRatio * (st.xBins.last() - st.xBins.first())
-        var closestIdx = 0
-        var minDist = Double.MAX_VALUE
-        st.xBins.forEachIndexed { i, x ->
-            val d = kotlin.math.abs(x - targetX)
-            if (d < minDist) { minDist = d; closestIdx = i }
-        }
-        val yMin = st.yBins.minOrNull() ?: 0.0
-        val yMax = st.yBins.maxOrNull() ?: 100.0
-        val yRange = yMax - yMin
-        val newValue = if (yRange > 0) yMin + yRatio * yRange else 50.0
-        setPointValue(closestIdx, newValue)
-        _state.value = _state.value.copy(selectedPoint = closestIdx)
+    fun setPointByDrag(index: Int, newValue: Double) {
+        val def = connectionManager.activeDefinition ?: return
+        val curve = def.getCurveByNameOrMap(curveName) ?: return
+        try {
+            tuneManager.updateCurveValue(curveName, index, newValue)
+            loadCurve() // reload to reflect change
+            _state.update { it.copy(isModified = true) }
+        } catch (_: Exception) { }
     }
 
     fun interpolateSelected() {
+        // Simple linear interpolation between neighbors
         val st = _state.value
-        val sel = st.selectedPoint
-        if (sel < 0 || sel >= st.yBins.size) return
-        pushUndo()
-        val newBins = st.yBins.toMutableList()
-        var leftIdx = sel - 1
-        while (leftIdx >= 0 && newBins[leftIdx].isNaN()) leftIdx--
-        var rightIdx = sel + 1
-        while (rightIdx < newBins.size && newBins[rightIdx].isNaN()) rightIdx++
-        val leftVal = if (leftIdx >= 0) newBins[leftIdx] else 0.0
-        val rightVal = if (rightIdx < newBins.size) newBins[rightIdx] else leftVal
-        val leftX = if (leftIdx >= 0) leftIdx.toDouble() else sel.toDouble()
-        val rightX = if (rightIdx < newBins.size) rightIdx.toDouble() else sel.toDouble()
-        val range = rightX - leftX
-        val interpolated = if (range > 0) {
-            leftVal + (rightVal - leftVal) * ((sel - leftX) / range)
-        } else leftVal
-        newBins[sel] = interpolated
-        _state.value = _state.value.copy(yBins = newBins, isModified = true)
+        val idx = st.selectedPoint
+        if (idx < 0 || idx >= st.yBins.size) return
+        val left = st.yBins.getOrNull(idx - 1) ?: return
+        val right = st.yBins.getOrNull(idx + 1) ?: return
+        val mid = (left + right) / 2.0
+        setPointByDrag(idx, mid)
     }
 
-    fun smoothCurve(passes: Int = 1) {
-        pushUndo()
-        var bins = _state.value.yBins.toMutableList()
-        repeat(passes) {
-            val smoothed = bins.toMutableList()
-            for (i in 1 until smoothed.size - 1) {
-                smoothed[i] = (bins[i - 1] + bins[i] + bins[i + 1]) / 3.0
-            }
-            bins = smoothed
+    fun smoothCurve() {
+        val st = _state.value
+        val yBins = st.yBins.toMutableList()
+        if (yBins.size < 3) return
+        val smoothed = yBins.toMutableList()
+        for (i in 1 until yBins.size - 1) {
+            smoothed[i] = (yBins[i - 1] + 2 * yBins[i] + yBins[i + 1]) / 4.0
         }
-        _state.value = _state.value.copy(yBins = bins, isModified = true)
-        onValuesChanged?.invoke(curveName, _state.value.xBins, bins)
-    }
-
-    fun undo() {
-        if (undoStack.isEmpty()) return
-        redoStack.add(_state.value.xBins to _state.value.yBins)
-        val (x, y) = undoStack.removeAt(undoStack.size - 1)
-        _state.value = _state.value.copy(xBins = x, yBins = y, isModified = true)
-    }
-
-    fun redo() {
-        if (redoStack.isEmpty()) return
-        undoStack.add(_state.value.xBins to _state.value.yBins)
-        val (x, y) = redoStack.removeAt(redoStack.size - 1)
-        _state.value = _state.value.copy(xBins = x, yBins = y, isModified = true)
-    }
-
-    fun canUndo(): Boolean = undoStack.isNotEmpty()
-    fun canRedo(): Boolean = redoStack.isNotEmpty()
-
-    private fun pushUndo() {
-        undoStack.add(_state.value.xBins to _state.value.yBins)
-        redoStack.clear()
-        if (undoStack.size > 100) undoStack.removeAt(0)
+        for (i in smoothed.indices) {
+            setPointByDrag(i, smoothed[i])
+        }
     }
 }

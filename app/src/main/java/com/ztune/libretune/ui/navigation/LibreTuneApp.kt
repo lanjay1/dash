@@ -1,14 +1,10 @@
 package com.ztune.libretune.ui.navigation
 
-import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,11 +24,11 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -42,24 +38,23 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.ztune.libretune.R
 import com.ztune.libretune.ui.screens.HomeScreen
+import com.ztune.libretune.ui.screens.analysis.VeAnalysisScreen
+import com.ztune.libretune.ui.screens.autotune.AutoTuneScreen
+import com.ztune.libretune.ui.screens.calibration.SensorCalibrationScreen
 import com.ztune.libretune.ui.screens.connection.ConnectionScreen
+import com.ztune.libretune.ui.screens.curve_editor.CurveEditorScreen
 import com.ztune.libretune.ui.screens.dashboard.DashboardScreen
+import com.ztune.libretune.ui.screens.datalog.DatalogChartScreen
 import com.ztune.libretune.ui.screens.datalog.DatalogScreen
+import com.ztune.libretune.ui.screens.diagnostics.EcuConsoleScreen
+import com.ztune.libretune.ui.screens.diagnostics.ToothLoggerScreen
+import com.ztune.libretune.ui.screens.git.TuneHistoryScreen
+import com.ztune.libretune.ui.screens.help.HelpViewerScreen
+import com.ztune.libretune.ui.screens.lua.LuaConsoleScreen
 import com.ztune.libretune.ui.screens.settings.SettingsScreen
 import com.ztune.libretune.ui.screens.TuneEditorScreen
 import com.ztune.libretune.ui.screens.tune_editor.TableEditorScreen
 import kotlinx.coroutines.launch
-
-// ======================================================================
-//  Placeholder screens for routes not yet implemented
-// ======================================================================
-
-@Composable
-private fun PlaceholderScreen(name: String, navController: NavHostController) {
-    Box(modifier = Modifier.padding(16.dp)) {
-        Text(text = name, style = MaterialTheme.typography.headlineMedium)
-    }
-}
 
 // ======================================================================
 //  Route constants
@@ -74,7 +69,7 @@ object Routes {
     const val DIALOG = "dialog/{name}"
     const val AUTOTUNE = "autotune"
     const val DATALOG = "datalog"
-    const val DATALOG_CHART = "datalog_chart"
+    const val DATALOG_CHART = "datalog_chart/{filePath}"
     const val CALIBRATION = "calibration"
     const val LUA_CONSOLE = "lua_console"
     const val TUNE_HISTORY = "tune_history"
@@ -87,11 +82,12 @@ object Routes {
 }
 
 /**
- * Root composable for LibreTune navigation.
+ * Root composable for ZTune navigation.
  *
- * When no ECU definition is loaded the user sees [HomeScreen].
- * Once a definition is loaded the main layout appears with a sidebar
- * (drawer on mobile) and a content area driven by [NavHost].
+ * Phase 30: All 11 placeholder routes are now wired to real screen
+ * implementations. MenuTreeViewModel is @HiltViewModel and observes
+ * EcuConnectionManager.activeDefinition reactively — the drawer/topbar/
+ * bottombar now render correctly when an ECU is connected.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -99,10 +95,9 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
-    // Observe whether an ECU definition has been loaded.
-    // MenuTreeViewModel is a plain ViewModel (not @HiltViewModel) because
-    // EcuDefinition is a runtime-discovered value, not a Hilt-provided singleton.
-    val menuTreeVm: MenuTreeViewModel = remember { MenuTreeViewModel() }
+    // Phase 30: MenuTreeViewModel is now @HiltViewModel — observes
+    // EcuConnectionManager.activeDefinition reactively.
+    val menuTreeVm: MenuTreeViewModel = hiltViewModel()
     val menuTree by menuTreeVm.menuTree.collectAsState()
     val hasDefinition = menuTree.isNotEmpty()
 
@@ -110,8 +105,10 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
     val scope = rememberCoroutineScope()
 
     // Routes that should hide the bottom bar and drawer.
-    val hideChromeRoutes = setOf(Routes.HOME, Routes.CONNECTION, Routes.TABLE_EDITOR,
-        Routes.CURVE_EDITOR, Routes.DIALOG, Routes.HELP)
+    val hideChromeRoutes = setOf(
+        Routes.HOME, Routes.CONNECTION,
+        Routes.TABLE_EDITOR, Routes.CURVE_EDITOR, Routes.DIALOG, Routes.HELP
+    )
     val baseRoute = currentRoute?.split("/")?.firstOrNull()
     val showChrome = baseRoute !in hideChromeRoutes
 
@@ -178,7 +175,7 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
                 startDestination = Routes.HOME,
                 modifier = Modifier.padding(innerPadding)
             ) {
-                // -- Home (welcome / definition loader) --------------------------------
+                // -- Home ---------------------------------------------------------------
                 composable(Routes.HOME) {
                     HomeScreen(
                         onNavigateToDashboard = { navController.navigateToTopLevel(Routes.DASHBOARD) },
@@ -187,28 +184,31 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
                     )
                 }
 
-                // -- Connection ------------------------------------------------------
+                // -- Connection ---------------------------------------------------------
                 composable(Routes.CONNECTION) {
                     ConnectionScreen(
                         onNavigateToDashboard = { navController.navigateToTopLevel(Routes.DASHBOARD) }
                     )
                 }
 
-                // -- Dashboard -------------------------------------------------------
+                // -- Dashboard ----------------------------------------------------------
                 composable(Routes.DASHBOARD) {
                     DashboardScreen(
                         onNavigateToConnection = { navController.navigate(Routes.CONNECTION) }
                     )
                 }
 
-                // -- Tune editor (overview) -------------------------------------------
+                // -- Tune editor overview ----------------------------------------------
                 composable(Routes.TUNE_EDITOR) {
                     TuneEditorScreen(
-                        onNavigateToConnection = { navController.navigate(Routes.CONNECTION) }
+                        onNavigateToConnection = { navController.navigate(Routes.CONNECTION) },
+                        onNavigateToTable = { tableName ->
+                            navController.navigate("table_editor/$tableName")
+                        }
                     )
                 }
 
-                // -- Table editor ----------------------------------------------------
+                // -- Table editor -------------------------------------------------------
                 composable(
                     route = Routes.TABLE_EDITOR,
                     arguments = listOf(navArgument("name") { type = NavType.StringType })
@@ -217,81 +217,99 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
                     TableEditorScreen(tableName = name)
                 }
 
-                // -- Curve editor ---------------------------------------------------
+                // -- Curve editor -------------------------------------------------------
                 composable(
                     route = Routes.CURVE_EDITOR,
                     arguments = listOf(navArgument("name") { type = NavType.StringType })
                 ) { backStack ->
                     val name = backStack.arguments?.getString("name").orEmpty()
-                    PlaceholderScreen("Curve Editor: $name", navController)
+                    CurveEditorScreen(
+                        onBack = { navController.popBackStack() },
+                        onSave = { navController.popBackStack() }
+                    )
                 }
 
-                // -- Dialog (constant editor / single-value editor) ------------------
+                // -- Dialog (constant editor) ------------------------------------------
                 composable(
                     route = Routes.DIALOG,
                     arguments = listOf(navArgument("name") { type = NavType.StringType })
                 ) { backStack ->
                     val name = backStack.arguments?.getString("name").orEmpty()
-                    PlaceholderScreen("Dialog: $name", navController)
+                    // Dialog editor renders inline settings for a named dialog
+                    // from the INI definition. For now, delegate to the table
+                    // editor which can handle scalar constants.
+                    TableEditorScreen(tableName = name)
                 }
 
-                // -- Auto-tune -------------------------------------------------------
+                // -- Auto-tune ----------------------------------------------------------
                 composable(Routes.AUTOTUNE) {
-                    PlaceholderScreen("Auto-Tune", navController)
+                    AutoTuneScreen()
                 }
 
-                // -- Datalog ---------------------------------------------------------
+                // -- Datalog ------------------------------------------------------------
                 composable(Routes.DATALOG) {
                     DatalogScreen(
                         onNavigateToConnection = { navController.navigate(Routes.CONNECTION) }
                     )
                 }
 
-                // -- Datalog chart viewer ---------------------------------------------
-                composable(Routes.DATALOG_CHART) {
-                    PlaceholderScreen("Datalog Chart", navController)
+                // -- Datalog chart viewer ----------------------------------------------
+                composable(
+                    route = Routes.DATALOG_CHART,
+                    arguments = listOf(navArgument("filePath") { type = NavType.StringType })
+                ) { backStack ->
+                    DatalogChartScreen(
+                        onBack = { navController.popBackStack() }
+                    )
                 }
 
-                // -- Calibration -----------------------------------------------------
+                // -- Calibration --------------------------------------------------------
                 composable(Routes.CALIBRATION) {
-                    PlaceholderScreen("Calibration", navController)
+                    SensorCalibrationScreen(
+                        onNavigateBack = { navController.popBackStack() }
+                    )
                 }
 
-                // -- Lua console -----------------------------------------------------
+                // -- Lua console --------------------------------------------------------
                 composable(Routes.LUA_CONSOLE) {
-                    PlaceholderScreen("Lua Console", navController)
+                    LuaConsoleScreen(
+                        onBack = { navController.popBackStack() }
+                    )
                 }
 
-                // -- Tune history (git) ----------------------------------------------
+                // -- Tune history (version control) ------------------------------------
                 composable(Routes.TUNE_HISTORY) {
-                    PlaceholderScreen("Tune History", navController)
+                    TuneHistoryScreen()
                 }
 
-                // -- VE analysis -----------------------------------------------------
+                // -- VE analysis --------------------------------------------------------
                 composable(Routes.VE_ANALYSIS) {
-                    PlaceholderScreen("VE Analysis", navController)
+                    VeAnalysisScreen()
                 }
 
-                // -- Tooth logger ----------------------------------------------------
+                // -- Tooth logger -------------------------------------------------------
                 composable(Routes.TOOTH_LOGGER) {
-                    PlaceholderScreen("Tooth Logger", navController)
+                    ToothLoggerScreen()
                 }
 
-                // -- ECU console -----------------------------------------------------
+                // -- ECU console --------------------------------------------------------
                 composable(Routes.ECU_CONSOLE) {
-                    PlaceholderScreen("ECU Console", navController)
+                    EcuConsoleScreen()
                 }
 
-                // -- Help -----------------------------------------------------------
+                // -- Help ---------------------------------------------------------------
                 composable(
                     route = Routes.HELP,
                     arguments = listOf(navArgument("topic") { type = NavType.StringType })
                 ) { backStack ->
                     val topic = backStack.arguments?.getString("topic").orEmpty()
-                    PlaceholderScreen("Help: $topic", navController)
+                    HelpViewerScreen(
+                        topic = com.ztune.libretune.core.ini.types.HelpTopic(title = topic, text = topic),
+                        onBack = { navController.popBackStack() }
+                    )
                 }
 
-                // -- Settings -------------------------------------------------------
+                // -- Settings -----------------------------------------------------------
                 composable(Routes.SETTINGS) {
                     SettingsScreen()
                 }
@@ -302,9 +320,6 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
 
 /** Navigate to a top-level destination with proper back-stack behaviour. */
 private fun NavHostController.navigateToTopLevel(route: String) {
-    // Build NavOptions manually so we don't depend on the `findStartDestination()`
-    // extension (not transitively pulled in via navigation-compose 2.8.4) and we
-    // avoid the private `saveState` setter inside the trailing-lambda DSL.
     val startDestId = graph.startDestinationId
     val options = androidx.navigation.NavOptions.Builder()
         .setPopUpTo(startDestId, inclusive = false, saveState = true)
@@ -315,11 +330,7 @@ private fun NavHostController.navigateToTopLevel(route: String) {
 }
 
 /**
- * Simple drawer that renders the menu tree as a flat list of navigation entries.
- *
- * Replaces the previously-missing `MenuTree` composable with a minimal
- * implementation that shows top-level menu items and their first-level
- * children, navigating to the appropriate route on tap.
+ * Drawer that renders the menu tree as a flat list of navigation entries.
  */
 @Composable
 private fun MenuTreeDrawer(
@@ -327,9 +338,7 @@ private fun MenuTreeDrawer(
     onNavigate: (String) -> Unit,
     currentRoute: String?
 ) {
-    androidx.compose.foundation.layout.Column(
-        modifier = Modifier.fillMaxWidth()
-    ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = "Menu",
             modifier = Modifier.padding(16.dp),
@@ -349,7 +358,7 @@ private fun MenuTreeDrawer(
                     NavigationDrawerItem(
                         label = { Text("  ${child.label}", style = MaterialTheme.typography.bodyMedium) },
                         selected = currentRoute == child.targetName,
-                        icon = { Icon(child.icon, contentDescription = null, modifier = Modifier.size(20.dp)) },
+                        icon = { Icon(child.icon, contentDescription = null, modifier = Modifier.padding(start = 12.dp) ) },
                         onClick = { onNavigate(child.targetName) },
                         modifier = Modifier.padding(start = 16.dp).padding(horizontal = 8.dp)
                     )

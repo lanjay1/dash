@@ -4,20 +4,36 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.ztune.libretune.core.EcuConnectionManager
+import com.ztune.libretune.core.TuneManager
 import com.ztune.libretune.core.lua.ChannelProvider
 import com.ztune.libretune.core.lua.ConstantProvider
 import com.ztune.libretune.core.lua.EcuCommandCallback
 import com.ztune.libretune.core.lua.LuaEngine
 import com.ztune.libretune.core.lua.LuaResult
+import com.ztune.libretune.core.realtime.RealtimeChannelStore
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
 data class ConsoleLine(val text: String, val type: LineType)
-
 enum class LineType { OUTPUT, ERROR, PRINT }
 
-class LuaConsoleViewModel(
-    private val channelProvider: ChannelProvider? = null,
-    private val constantProvider: ConstantProvider? = null,
-    private val ecuCallback: EcuCommandCallback? = null
+/**
+ * Phase 30: Converted to @HiltViewModel.
+ *
+ * Injects [EcuConnectionManager], [TuneManager], and [RealtimeChannelStore]
+ * to wire the Lua engine's channel/constant/ECU providers to live data.
+ * Scripts are executed on Dispatchers.Default to avoid blocking the UI thread.
+ */
+@HiltViewModel
+class LuaConsoleViewModel @Inject constructor(
+    private val connectionManager: EcuConnectionManager,
+    private val tuneManager: TuneManager,
+    private val channelStore: RealtimeChannelStore
 ) : ViewModel() {
 
     var scriptInput by mutableStateOf("")
@@ -31,43 +47,39 @@ class LuaConsoleViewModel(
     var isExecuting by mutableStateOf(false)
         private set
 
+    private val channelProvider = ChannelProvider { name ->
+        channelStore.getChannelValue(name, 0.0)
+    }
+
+    private val constantProvider = ConstantProvider { name ->
+        val def = connectionManager.activeDefinition
+        val tune = tuneManager.currentTune
+        if (def != null && tune != null) {
+            tuneManager.getConstantValue(name) ?: 0.0
+        } else 0.0
+    }
+
+    private val ecuCallback = EcuCommandCallback { cmd, args ->
+        val ecu = connectionManager.ecuInterface
+        if (ecu != null) {
+            // Execute ECU command via the protocol layer
+            kotlinx.coroutines.runBlocking {
+                ecu.sendControllerCommand(cmd, cmd, args.firstOrNull()?.toInt() ?: 0)
+            }
+            LuaResult.Success("Command sent: $cmd")
+        } else {
+            LuaResult.Error("ECU not connected")
+        }
+    }
+
     private val engine = LuaEngine(channelProvider, constantProvider, ecuCallback)
 
     fun updateScript(text: String) {
         scriptInput = text
     }
 
-    fun executeScript() {
-        val trimmed = scriptInput.trim()
-        if (trimmed.isEmpty()) return
-        isExecuting = true
-        val result: LuaResult = engine.execute(trimmed)
-        val newLines = mutableListOf<ConsoleLine>()
-        // Print output lines from LuaEngine — they come from print() calls
-        for (line in result.output) {
-            val type = when {
-                line.startsWith("Error:") -> LineType.ERROR
-                else -> LineType.PRINT
-            }
-            newLines.add(ConsoleLine(line, type))
-        }
-        // If no print output and no error, show the result
-        if (newLines.isEmpty() && result.error == null) {
-            newLines.add(ConsoleLine("(executed successfully, no output)", LineType.OUTPUT))
-        }
-        // If there was an error not captured in output
-        if (result.error != null && newLines.none { it.type == LineType.ERROR }) {
-            newLines.add(ConsoleLine("Error: ${result.error}", LineType.OUTPUT))
-        }
-        outputLines = outputLines + newLines
-        // Add to script history
-        val updated = (listOf(trimmed) + scriptHistory.filter { it != trimmed }).take(50)
-        scriptHistory = updated
-        isExecuting = false
-    }
-
-    fun clearOutput() {
-        outputLines = emptyList()
+    fun toggleHistory() {
+        showHistory = !showHistory
     }
 
     fun selectFromHistory(script: String) {
@@ -75,11 +87,42 @@ class LuaConsoleViewModel(
         showHistory = false
     }
 
-    fun toggleHistory() {
-        showHistory = !showHistory
+    fun clearOutput() {
+        outputLines = emptyList()
     }
 
-    fun dismissHistory() {
-        showHistory = false
+    fun executeScript() {
+        val trimmed = scriptInput.trim()
+        if (trimmed.isEmpty()) return
+        isExecuting = true
+        if (scriptHistory.isEmpty() || scriptHistory.first() != trimmed) {
+            scriptHistory = listOf(trimmed) + scriptHistory.take(49)
+        }
+
+        viewModelScope.launch(Dispatchers.Default) {
+            val result = engine.execute(trimmed)
+            val lines = mutableListOf<ConsoleLine>()
+            lines.add(ConsoleLine("> $trimmed", LineType.PRINT))
+            when (result) {
+                is LuaResult.Success -> {
+                    val output = result.output
+                    if (output.isNotEmpty()) {
+                        output.lines().forEach { line ->
+                            if (line.isNotBlank()) lines.add(ConsoleLine(line, LineType.OUTPUT))
+                        }
+                    }
+                    if (result.value.isNotEmpty()) {
+                        lines.add(ConsoleLine("=> ${result.value}", LineType.OUTPUT))
+                    }
+                }
+                is LuaResult.Error -> {
+                    lines.add(ConsoleLine("Error: ${result.message}", LineType.ERROR))
+                }
+            }
+            withContext(Dispatchers.Main) {
+                outputLines = outputLines + lines
+                isExecuting = false
+            }
+        }
     }
 }

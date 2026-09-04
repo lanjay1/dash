@@ -1,20 +1,29 @@
 package com.ztune.libretune.ui.screens.git
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ztune.libretune.core.git.TuneCommit
 import com.ztune.libretune.core.git.TuneDiffResult
 import com.ztune.libretune.core.git.TuneVersionControl
 import com.ztune.libretune.core.tune.Tune
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
-class TuneHistoryViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val vc = TuneVersionControl(application)
+/**
+ * Phase 30: Converted to @HiltViewModel.
+ *
+ * Previously extended AndroidViewModel and constructed its own
+ * TuneVersionControl instance, bypassing the Hilt-provided singleton.
+ * Now injects the singleton via constructor injection.
+ */
+@HiltViewModel
+class TuneHistoryViewModel @Inject constructor(
+    private val vc: TuneVersionControl
+) : ViewModel() {
 
     private val _commits = MutableStateFlow<List<TuneCommit>>(emptyList())
     val commits: StateFlow<List<TuneCommit>> = _commits.asStateFlow()
@@ -43,7 +52,6 @@ class TuneHistoryViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    /** Show diff of [commitId] against the previous commit (index + 1), or the first entry. */
     fun showDiff(commitId: String, message: String, index: Int) {
         viewModelScope.launch {
             val next = index + 1
