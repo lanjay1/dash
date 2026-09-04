@@ -99,10 +99,10 @@ class CurveEditorViewModel @Inject constructor(
         val st = _state.value
         if (st.xBins.isEmpty() || st.yBins.isEmpty()) return
         // Find nearest x bin
-        val xRatio = if (chartBounds.width > 0) (offset.x - chartBounds.left) / chartBounds.width else 0.0
+        val xRatio = if (chartBounds.width > 0) (offset.x - chartBounds.left) / chartBounds.width else 0.0f
         val idx = (xRatio * st.xBins.size).toInt().coerceIn(0, st.yBins.size - 1)
         // Compute new y value from y position
-        val yRatio = if (chartBounds.height > 0) 1.0 - (offset.y - chartBounds.top) / chartBounds.height else 0.5
+        val yRatio = if (chartBounds.height > 0) 1.0f - (offset.y - chartBounds.top) / chartBounds.height else 0.5f
         val yMin = st.yBins.minOrNull() ?: 0.0
         val yMax = st.yBins.maxOrNull() ?: 100.0
         val newValue = yMin + yRatio * (yMax - yMin)
