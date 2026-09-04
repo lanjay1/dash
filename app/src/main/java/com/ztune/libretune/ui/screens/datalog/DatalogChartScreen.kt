@@ -22,7 +22,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.draw.drawLayer
+import androidx.compose.ui.graphics.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer as graphicsLayerDrawLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
@@ -145,7 +146,7 @@ fun DatalogChartScreen(
                                 graphicsLayer.record {
                                     this@drawWithContent.drawContent()
                                 }
-                                drawLayer(graphicsLayer)
+                                graphicsLayerDrawLayer(graphicsLayer)
                             },
                     ) {
                         DatalogChart(state, channelRanges, viewModel)
@@ -270,7 +271,7 @@ private fun DatalogChart(
                             prevX = cur.x
                         }
                         changes.forEach { it.consume() }
-                    } while (changes.any { it.isPressed })
+                    } while (changes.any { it.pressed })
                     if (!moved) {
                         viewModel.updateCrosshair(down.position.x / size.width.toFloat())
                     }

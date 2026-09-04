@@ -179,7 +179,7 @@ class MockEcuTransport(
         block[10] = (map and 0xFF).toByte()
         block[11] = ((map ushr 8) and 0xFF).toByte()
         // batteryVoltage (U08 @ offset 12) — scale 0.1, so raw = 142 → 14.2V
-        block[12] = 142
+        block[12] = 142.toByte()
         // afr (U16 @ offset 14) — scale 0.1, so raw = 147 → 14.7 AFR
         val afrRaw = 147
         block[14] = (afrRaw and 0xFF).toByte()

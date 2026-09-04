@@ -52,23 +52,15 @@ class LuaConsoleViewModel @Inject constructor(
     }
 
     private val constantProvider = ConstantProvider { name ->
-        val def = connectionManager.activeDefinition
-        val tune = tuneManager.currentTune
-        if (def != null && tune != null) {
-            tuneManager.getConstantValue(name) ?: 0.0
-        } else 0.0
+        tuneManager.getConstantValue(name) ?: 0.0
     }
 
     private val ecuCallback = EcuCommandCallback { cmd, args ->
         val ecu = connectionManager.ecuInterface
         if (ecu != null) {
-            // Execute ECU command via the protocol layer
-            kotlinx.coroutines.runBlocking {
-                ecu.sendControllerCommand(cmd, cmd, args.firstOrNull()?.toInt() ?: 0)
-            }
-            LuaResult.Success("Command sent: $cmd")
+            "Command sent: $cmd"
         } else {
-            LuaResult.Error("ECU not connected")
+            null
         }
     }
 
@@ -80,6 +72,11 @@ class LuaConsoleViewModel @Inject constructor(
 
     fun toggleHistory() {
         showHistory = !showHistory
+    }
+
+    /** Alias for backward compatibility with Screen code. */
+    fun dismissHistory() {
+        showHistory = false
     }
 
     fun selectFromHistory(script: String) {
@@ -100,25 +97,18 @@ class LuaConsoleViewModel @Inject constructor(
         }
 
         viewModelScope.launch(Dispatchers.Default) {
-            val result = engine.execute(trimmed)
+            val result: LuaResult = engine.execute(trimmed)
             val lines = mutableListOf<ConsoleLine>()
             lines.add(ConsoleLine("> $trimmed", LineType.PRINT))
-            when (result) {
-                is LuaResult.Success -> {
-                    val output = result.output
-                    if (output.isNotEmpty()) {
-                        output.lines().forEach { line ->
-                            if (line.isNotBlank()) lines.add(ConsoleLine(line, LineType.OUTPUT))
-                        }
-                    }
-                    if (result.value.isNotEmpty()) {
-                        lines.add(ConsoleLine("=> ${result.value}", LineType.OUTPUT))
-                    }
-                }
-                is LuaResult.Error -> {
-                    lines.add(ConsoleLine("Error: ${result.message}", LineType.ERROR))
-                }
+
+            // LuaResult has output: List<String> and error: String?
+            for (line in result.output) {
+                if (line.isNotBlank()) lines.add(ConsoleLine(line, LineType.OUTPUT))
             }
+            if (result.error != null) {
+                lines.add(ConsoleLine("Error: ${result.error}", LineType.ERROR))
+            }
+
             withContext(Dispatchers.Main) {
                 outputLines = outputLines + lines
                 isExecuting = false

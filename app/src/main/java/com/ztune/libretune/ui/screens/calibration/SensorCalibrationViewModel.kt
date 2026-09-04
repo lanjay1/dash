@@ -67,6 +67,12 @@ class SensorCalibrationViewModel @Inject constructor(
         loadCurrentCalibration(type)
     }
 
+    /** Alias for [selectType] — kept for Screen compatibility. */
+    fun setCalibrationType(type: CalibrationType) = selectType(type)
+
+    /** Alias for [generatePreview] — kept for Screen compatibility. */
+    fun generateCalibration() = generatePreview()
+
     private fun loadCurrentCalibration(type: CalibrationType) {
         val def = definition ?: return
         val tune = tuneManager.currentTune ?: return
@@ -74,17 +80,19 @@ class SensorCalibrationViewModel @Inject constructor(
             .firstOrNull { it.key.contains(type.name, ignoreCase = true) } ?: return
         val pageData = tune.getPageData(refTable.value.valuesPage) ?: return
         val decoder = com.ztune.libretune.core.realtime.RealtimeDecoder(def)
+        // ReferenceTable doesn't have dataType/scale/translate/units — use defaults
+        val size = refTable.value.xBinsSize.coerceAtLeast(1)
         val current = decoder.decodeCurve(pageData, com.ztune.libretune.core.ini.types.CurveDefinition(
             name = refTable.key,
             valuesOffset = refTable.value.valuesOffset,
             valuesPage = refTable.value.valuesPage,
-            dataType = refTable.value.dataType,
-            scale = refTable.value.scale,
-            translate = refTable.value.translate,
-            units = refTable.value.units,
-            size = refTable.value.size
+            dataType = com.ztune.libretune.core.ini.types.DataType.U08,
+            scale = 1.0,
+            translate = 0.0,
+            units = "",
+            size = size
         ))
-        _state.update { it.copy(currentValues = current, xBins = (0 until refTable.value.size).map { it.toDouble() }) }
+        _state.update { it.copy(currentValues = current, xBins = (0 until size).map { it.toDouble() }) })
     }
 
     fun captureLow() {
@@ -99,7 +107,7 @@ class SensorCalibrationViewModel @Inject constructor(
         val st = _state.value
         val refTable = definition?.referenceTables?.entries
             ?.firstOrNull { it.key.contains(st.type.name, ignoreCase = true) }
-        val size = refTable?.value?.size ?: 32
+        val size = refTable?.value?.xBinsSize ?: 32
         val low = st.adcLow
         val high = st.adcHigh
         val newValues = (0 until size).map { i ->

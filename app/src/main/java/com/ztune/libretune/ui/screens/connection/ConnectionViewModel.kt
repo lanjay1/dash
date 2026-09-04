@@ -270,17 +270,20 @@ class ConnectionViewModel @Inject constructor(
 
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action != UsbManager.ACTION_USB_PERMISSION) return
+                if (intent?.action != ACTION_USB_PERMISSION) return
 
                 val granted = intent.getBooleanExtra(
                     UsbManager.EXTRA_PERMISSION_GRANTED, false
                 )
-                val dev = intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
+                val dev = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra<UsbDevice>(UsbManager.EXTRA_DEVICE)
+                }
 
                 Log.i(TAG, "USB permission broadcast: granted=$granted, device=${dev?.deviceName}")
 
-                // Unregister self before resuming to avoid double-unregister
-                // when the coroutine is also cancelled.
                 runCatching {
                     context?.unregisterReceiver(this)
                 }
@@ -293,7 +296,7 @@ class ConnectionViewModel @Inject constructor(
 
         // Register receiver. Use RECEIVER_NOT_EXPORTED on API 33+ since the
         // broadcast comes from the system (UsbManager), not from another app.
-        val filter = IntentFilter(UsbManager.ACTION_USB_PERMISSION)
+        val filter = IntentFilter(ACTION_USB_PERMISSION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             context.registerReceiver(
                 receiver,
@@ -307,9 +310,8 @@ class ConnectionViewModel @Inject constructor(
 
         // Build the PendingIntent that the system will use to deliver the
         // permission result to our receiver.
-        val intent = Intent(UsbManager.ACTION_USB_PERMISSION).apply {
-            setPackage(context.packageName) // explicit broadcast to our own package
-        }
+        val intent = Intent(ACTION_USB_PERMISSION)
+        intent.setPackage(context.packageName)
         val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         } else {
@@ -473,5 +475,6 @@ class ConnectionViewModel @Inject constructor(
 
     private companion object {
         private const val TAG = "ConnectionVM"
+        private const val ACTION_USB_PERMISSION = "android.hardware.usb.action.USB_PERMISSION"
     }
 }
