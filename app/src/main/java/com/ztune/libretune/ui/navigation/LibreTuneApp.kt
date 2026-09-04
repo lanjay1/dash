@@ -74,6 +74,7 @@ import com.ztune.libretune.ui.screens.ecu_definition.EcuDefinitionBrowserScreen
 import com.ztune.libretune.ui.screens.pinconfig.PinConfigScreen
 import com.ztune.libretune.ui.screens.project.ProjectHomeScreen
 import com.ztune.libretune.ui.screens.search.GlobalSearchScreen
+import com.ztune.libretune.ui.screens.help.HelpAboutDiagnosticsScreen
 import kotlinx.coroutines.launch
 
 // ======================================================================
@@ -110,6 +111,7 @@ object Routes {
     const val PIN_CONFIG = "pin_config"
     const val PROJECT_HOME = "project_home"
     const val GLOBAL_SEARCH = "global_search"
+    const val HELP_ABOUT = "help_about"
 }
 
 /**
@@ -403,6 +405,11 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
                         onNavigate = { route -> navController.navigate(route) }
                     )
                 }
+
+                // -- Help / About / Diagnostics -----------------------------------------
+                composable(Routes.HELP_ABOUT) {
+                    HelpAboutDiagnosticsScreen(onNavigateBack = { navController.popBackStack() })
+                }
             }
         }
     }
@@ -541,6 +548,9 @@ private fun MenuTreeDrawer(
             modifier = Modifier.padding(horizontal = 8.dp))
         NavigationDrawerItem(label = { Text("Search") }, selected = currentRoute == Routes.GLOBAL_SEARCH,
             icon = { Icon(Icons.AutoMirrored.Outlined.Help, null) }, onClick = { onNavigate(Routes.GLOBAL_SEARCH) },
+            modifier = Modifier.padding(horizontal = 8.dp))
+        NavigationDrawerItem(label = { Text("Help & About") }, selected = currentRoute == Routes.HELP_ABOUT,
+            icon = { Icon(Icons.AutoMirrored.Outlined.Help, null) }, onClick = { onNavigate(Routes.HELP_ABOUT) },
             modifier = Modifier.padding(horizontal = 8.dp))
     }
 }
