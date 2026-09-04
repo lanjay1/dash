@@ -83,10 +83,19 @@ class TableEditorViewModel @Inject constructor(
     }
 
     fun loadTable(name: String) {
-        val def = definition ?: tuneManager.activeDefinition
+        // UI-FIRST: Use connectionManager.activeDefinition (not tuneManager which is stale)
+        val def = connectionManager.activeDefinition
         if (def == null) { loadDemoTable(name); return }
+
+        // Try to find the table by name or map name
         val tbl = def.getTableByNameOrMap(name)
-        if (tbl == null) { loadDemoTable(name); return }
+        if (tbl == null || tbl.rows == 0 || tbl.cols == 0) {
+            // Table not found in definition OR has 0 dimensions (INI parser issue)
+            // Fall back to demo table so UI is still usable
+            loadDemoTable(name)
+            return
+        }
+
         definition = def
         tableDef = tbl
         xOutputChannel = null

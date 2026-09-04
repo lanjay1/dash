@@ -121,7 +121,13 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
                         menuItems = menuTree,
                         onNavigate = { route ->
                             scope.launch { drawerState.close() }
-                            navController.navigate(route)
+                            // route di sini adalah targetName dari MenuItemUi,
+                            // bisa berupa tableName, dialogName, atau command.
+                            // Kita perlu translate ke navigation route yang benar.
+                            val navRoute = resolveMenuRoute(route, menuTree)
+                            if (navRoute != null) {
+                                navController.navigate(navRoute)
+                            }
                         },
                         currentRoute = currentRoute
                     )
@@ -330,8 +336,58 @@ private fun NavHostController.navigateToTopLevel(route: String) {
 }
 
 /**
- * Drawer that renders the menu tree as a flat list of navigation entries.
+ * Translate a menu item's [targetName] to a navigation route.
+ *
+ * Menu items from the INI definition have a `targetName` that is either a
+ * table name, dialog name, curve name, or command. The navigation graph
+ * uses parameterized routes like `table_editor/{name}` and `dialog/{name}`.
+ * This function looks up the menu item by targetName, determines its type,
+ * and returns the correct route string.
+ *
+ * Returns null if the targetName doesn't match any known menu item type.
  */
+private fun resolveMenuRoute(
+    targetName: String,
+    menuTree: List<MenuItemUi>
+): String? {
+    // Find the menu item by targetName
+    val item = findMenuItemByTarget(menuTree, targetName) ?: return null
+
+    return when (item.type) {
+        MenuNodeType.TABLE -> "table_editor/${encodeRoute(item.targetName)}"
+        MenuNodeType.DIALOG -> "dialog/${encodeRoute(item.targetName)}"
+        MenuNodeType.CURVE -> "curve_editor/${encodeRoute(item.targetName)}"
+        MenuNodeType.CALIBRATION -> Routes.CALIBRATION
+        MenuNodeType.DASHBOARD -> Routes.DASHBOARD
+        MenuNodeType.LOG -> Routes.DATALOG
+        MenuNodeType.HELP -> "help/${encodeRoute(item.targetName)}"
+        MenuNodeType.INDICATOR, MenuNodeType.READOUT -> "dialog/${encodeRoute(item.targetName)}"
+        MenuNodeType.COMMAND -> null // commands don't navigate
+        MenuNodeType.PORT_EDITOR -> null // port editor not yet a route
+        MenuNodeType.FOLDER -> null // folders don't navigate
+    }
+}
+
+/** Recursively search menu tree for an item with matching targetName. */
+private fun findMenuItemByTarget(
+    items: List<MenuItemUi>,
+    targetName: String
+): MenuItemUi? {
+    for (item in items) {
+        if (item.targetName == targetName) return item
+        val found = findMenuItemByTarget(item.children, targetName)
+        if (found != null) return found
+    }
+    return null
+}
+
+/**
+ * Encode a string for use in a navigation route URL.
+ * Replaces `/` and other special characters that would break route parsing.
+ */
+private fun encodeRoute(s: String): String =
+    android.net.Uri.encode(s)
+
 @Composable
 private fun MenuTreeDrawer(
     menuItems: List<MenuItemUi>,

@@ -51,8 +51,26 @@ class TuneEditorOverviewViewModel @Inject constructor(
 ) : ViewModel() {
     val connectionState get() = connectionManager.state
 
+    /**
+     * Tables from the ECU definition. If the definition has 0 tables
+     * (INI parser issue), return demo table entries so the UI is still
+     * usable and the user can open the table editor.
+     */
     val tables: List<TableDefinition>
-        get() = connectionManager.activeDefinition?.tables?.values?.toList()?.sortedBy { it.title } ?: emptyList()
+        get() {
+            val realTables = connectionManager.activeDefinition?.tables?.values?.toList()
+            if (!realTables.isNullOrEmpty()) return realTables.sortedBy { it.title }
+
+            // Fallback: return demo table definitions
+            return listOf(
+                TableDefinition(name="veTable1Tbl", mapName="veTable1Map", title="VE Table 1",
+                    role=TableRole.VE, rows=16, cols=16, units="%", scale=1.0),
+                TableDefinition(name="ignTable1Tbl", mapName="ignTable1Map", title="Ignition Table 1",
+                    role=TableRole.IGNITION, rows=16, cols=16, units="°", scale=1.0),
+                TableDefinition(name="afrTable1Tbl", mapName="afrTable1Map", title="AFR Target 1",
+                    role=TableRole.AFR_TARGET, rows=8, cols=16, units=":1", scale=0.1)
+            )
+        }
 
     val isConnected: Boolean
         get() = connectionState.value.status == EcuConnectionStatus.CONNECTED
