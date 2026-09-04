@@ -5,7 +5,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Help
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.DeveloperBoard
+import androidx.compose.material.icons.outlined.Folder
+import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Lightbulb
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.Terminal
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -54,6 +64,16 @@ import com.ztune.libretune.ui.screens.lua.LuaConsoleScreen
 import com.ztune.libretune.ui.screens.settings.SettingsScreen
 import com.ztune.libretune.ui.screens.TuneEditorScreen
 import com.ztune.libretune.ui.screens.tune_editor.TableEditorScreen
+import com.ztune.libretune.ui.screens.engine_constants.EngineConstantsScreen
+import com.ztune.libretune.ui.screens.performance.PerformanceCalculatorScreen
+import com.ztune.libretune.ui.screens.ai_assistant.AiAssistantScreen
+import com.ztune.libretune.ui.screens.scripting.ActionScriptingScreen
+import com.ztune.libretune.ui.screens.plugin.PluginManagerScreen
+import com.ztune.libretune.ui.screens.importexport.ImportExportScreen
+import com.ztune.libretune.ui.screens.ecu_definition.EcuDefinitionBrowserScreen
+import com.ztune.libretune.ui.screens.pinconfig.PinConfigScreen
+import com.ztune.libretune.ui.screens.project.ProjectHomeScreen
+import com.ztune.libretune.ui.screens.search.GlobalSearchScreen
 import kotlinx.coroutines.launch
 
 // ======================================================================
@@ -79,6 +99,17 @@ object Routes {
     const val HELP = "help/{topic}"
     const val SETTINGS = "settings"
     const val CONNECTION = "connection"
+    // New routes — UI-first completion
+    const val ENGINE_CONSTANTS = "engine_constants"
+    const val PERFORMANCE_CALC = "performance_calculator"
+    const val AI_ASSISTANT = "ai_assistant"
+    const val ACTION_SCRIPTING = "action_scripting"
+    const val PLUGIN_MANAGER = "plugin_manager"
+    const val IMPORT_EXPORT = "import_export"
+    const val ECU_DEFINITION_BROWSER = "ecu_definition_browser"
+    const val PIN_CONFIG = "pin_config"
+    const val PROJECT_HOME = "project_home"
+    const val GLOBAL_SEARCH = "global_search"
 }
 
 /**
@@ -319,6 +350,59 @@ fun LibreTuneApp(navController: NavHostController = rememberNavController()) {
                 composable(Routes.SETTINGS) {
                     SettingsScreen()
                 }
+
+                // -- Engine Constants --------------------------------------------------
+                composable(Routes.ENGINE_CONSTANTS) {
+                    EngineConstantsScreen(onNavigateBack = { navController.popBackStack() })
+                }
+
+                // -- Performance Calculator ---------------------------------------------
+                composable(Routes.PERFORMANCE_CALC) {
+                    PerformanceCalculatorScreen(onNavigateBack = { navController.popBackStack() })
+                }
+
+                // -- AI Assistant -------------------------------------------------------
+                composable(Routes.AI_ASSISTANT) {
+                    AiAssistantScreen(onNavigateBack = { navController.popBackStack() })
+                }
+
+                // -- Action Scripting ---------------------------------------------------
+                composable(Routes.ACTION_SCRIPTING) {
+                    ActionScriptingScreen(onNavigateBack = { navController.popBackStack() })
+                }
+
+                // -- Plugin Manager -----------------------------------------------------
+                composable(Routes.PLUGIN_MANAGER) {
+                    PluginManagerScreen(onNavigateBack = { navController.popBackStack() })
+                }
+
+                // -- Import / Export ----------------------------------------------------
+                composable(Routes.IMPORT_EXPORT) {
+                    ImportExportScreen(onNavigateBack = { navController.popBackStack() })
+                }
+
+                // -- ECU Definition Browser ---------------------------------------------
+                composable(Routes.ECU_DEFINITION_BROWSER) {
+                    EcuDefinitionBrowserScreen(onNavigateBack = { navController.popBackStack() })
+                }
+
+                // -- Pin Configuration --------------------------------------------------
+                composable(Routes.PIN_CONFIG) {
+                    PinConfigScreen(onNavigateBack = { navController.popBackStack() })
+                }
+
+                // -- Project Home -------------------------------------------------------
+                composable(Routes.PROJECT_HOME) {
+                    ProjectHomeScreen(onNavigateBack = { navController.popBackStack() })
+                }
+
+                // -- Global Search ------------------------------------------------------
+                composable(Routes.GLOBAL_SEARCH) {
+                    GlobalSearchScreen(
+                        onNavigateBack = { navController.popBackStack() },
+                        onNavigate = { route -> navController.navigate(route) }
+                    )
+                }
             }
         }
     }
@@ -355,16 +439,16 @@ private fun resolveMenuRoute(
 
     return when (item.type) {
         MenuNodeType.TABLE -> "table_editor/${encodeRoute(item.targetName)}"
-        MenuNodeType.DIALOG -> "dialog/${encodeRoute(item.targetName)}"
+        MenuNodeType.DIALOG -> Routes.ENGINE_CONSTANTS
         MenuNodeType.CURVE -> "curve_editor/${encodeRoute(item.targetName)}"
         MenuNodeType.CALIBRATION -> Routes.CALIBRATION
         MenuNodeType.DASHBOARD -> Routes.DASHBOARD
         MenuNodeType.LOG -> Routes.DATALOG
         MenuNodeType.HELP -> "help/${encodeRoute(item.targetName)}"
-        MenuNodeType.INDICATOR, MenuNodeType.READOUT -> "dialog/${encodeRoute(item.targetName)}"
-        MenuNodeType.COMMAND -> null // commands don't navigate
-        MenuNodeType.PORT_EDITOR -> null // port editor not yet a route
-        MenuNodeType.FOLDER -> null // folders don't navigate
+        MenuNodeType.INDICATOR, MenuNodeType.READOUT -> Routes.ENGINE_CONSTANTS
+        MenuNodeType.COMMAND -> null
+        MenuNodeType.PORT_EDITOR -> Routes.PIN_CONFIG
+        MenuNodeType.FOLDER -> null
     }
 }
 
@@ -421,5 +505,42 @@ private fun MenuTreeDrawer(
                 }
             }
         }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+        Text("Tools", modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.titleSmall)
+        NavigationDrawerItem(label = { Text("Engine Constants") }, selected = currentRoute == Routes.ENGINE_CONSTANTS,
+            icon = { Icon(Icons.Outlined.Settings, null) }, onClick = { onNavigate(Routes.ENGINE_CONSTANTS) },
+            modifier = Modifier.padding(horizontal = 8.dp))
+        NavigationDrawerItem(label = { Text("AutoTune") }, selected = currentRoute == Routes.AUTOTUNE,
+            icon = { Icon(Icons.Outlined.Tune, null) }, onClick = { onNavigate(Routes.AUTOTUNE) },
+            modifier = Modifier.padding(horizontal = 8.dp))
+        NavigationDrawerItem(label = { Text("Performance Calc") }, selected = currentRoute == Routes.PERFORMANCE_CALC,
+            icon = { Icon(Icons.Outlined.Speed, null) }, onClick = { onNavigate(Routes.PERFORMANCE_CALC) },
+            modifier = Modifier.padding(horizontal = 8.dp))
+        NavigationDrawerItem(label = { Text("AI Assistant") }, selected = currentRoute == Routes.AI_ASSISTANT,
+            icon = { Icon(Icons.Outlined.Lightbulb, null) }, onClick = { onNavigate(Routes.AI_ASSISTANT) },
+            modifier = Modifier.padding(horizontal = 8.dp))
+        NavigationDrawerItem(label = { Text("Action Scripting") }, selected = currentRoute == Routes.ACTION_SCRIPTING,
+            icon = { Icon(Icons.Outlined.Terminal, null) }, onClick = { onNavigate(Routes.ACTION_SCRIPTING) },
+            modifier = Modifier.padding(horizontal = 8.dp))
+        NavigationDrawerItem(label = { Text("Pin Config") }, selected = currentRoute == Routes.PIN_CONFIG,
+            icon = { Icon(Icons.Outlined.DeveloperBoard, null) }, onClick = { onNavigate(Routes.PIN_CONFIG) },
+            modifier = Modifier.padding(horizontal = 8.dp))
+        NavigationDrawerItem(label = { Text("Import/Export") }, selected = currentRoute == Routes.IMPORT_EXPORT,
+            icon = { Icon(Icons.Outlined.Folder, null) }, onClick = { onNavigate(Routes.IMPORT_EXPORT) },
+            modifier = Modifier.padding(horizontal = 8.dp))
+        NavigationDrawerItem(label = { Text("Plugins") }, selected = currentRoute == Routes.PLUGIN_MANAGER,
+            icon = { Icon(Icons.Outlined.GridView, null) }, onClick = { onNavigate(Routes.PLUGIN_MANAGER) },
+            modifier = Modifier.padding(horizontal = 8.dp))
+        NavigationDrawerItem(label = { Text("Projects") }, selected = currentRoute == Routes.PROJECT_HOME,
+            icon = { Icon(Icons.Outlined.Folder, null) }, onClick = { onNavigate(Routes.PROJECT_HOME) },
+            modifier = Modifier.padding(horizontal = 8.dp))
+        NavigationDrawerItem(label = { Text("ECU Definitions") }, selected = currentRoute == Routes.ECU_DEFINITION_BROWSER,
+            icon = { Icon(Icons.Outlined.Dashboard, null) }, onClick = { onNavigate(Routes.ECU_DEFINITION_BROWSER) },
+            modifier = Modifier.padding(horizontal = 8.dp))
+        NavigationDrawerItem(label = { Text("Search") }, selected = currentRoute == Routes.GLOBAL_SEARCH,
+            icon = { Icon(Icons.AutoMirrored.Outlined.Help, null) }, onClick = { onNavigate(Routes.GLOBAL_SEARCH) },
+            modifier = Modifier.padding(horizontal = 8.dp))
     }
 }
