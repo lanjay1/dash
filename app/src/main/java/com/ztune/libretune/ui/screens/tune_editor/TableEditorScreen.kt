@@ -22,6 +22,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.ViewInAr
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -67,6 +69,8 @@ fun TableEditorScreen(
     val state by viewModel.uiState.collectAsState()
     var showCellEditor by remember { mutableStateOf(false) }
     var showBurnDialog by remember { mutableStateOf(false) }
+    var is3DView by remember { mutableStateOf(false) }
+    var showRebinDialog by remember { mutableStateOf(false) }
 
     // Load table data once when the table name changes.
     LaunchedEffect(tableName) {
@@ -169,6 +173,13 @@ fun TableEditorScreen(
                         modifier = Modifier.padding(end = 8.dp)
                     )
                 }
+                // 2D/3D toggle
+                IconButton(onClick = { is3DView = !is3DView }) {
+                    Icon(
+                        if (is3DView) Icons.Default.GridOn else Icons.Default.ViewInAr,
+                        contentDescription = if (is3DView) "2D View" else "3D View"
+                    )
+                }
             },
             scrollBehavior = scrollBehavior
         )
@@ -202,6 +213,19 @@ fun TableEditorScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp)
         )
+
+        // ------------------------------------------------------------------
+        //  3D Surface View (when toggled)
+        // ------------------------------------------------------------------
+        if (is3DView && state.values.isNotEmpty()) {
+            com.ztune.libretune.ui.screens.tune_editor.view3d.Table3DView(
+                values = state.values,
+                min = state.min,
+                max = state.max,
+                modifier = Modifier.fillMaxSize().padding(8.dp)
+            )
+            return@Column
+        }
 
         // ------------------------------------------------------------------
         //  Toolbar operations bar
@@ -324,6 +348,47 @@ fun TableEditorScreen(
     //  Context menu (long-press on cell)
     // ======================================================================
     TableContextMenu(state = state, viewModel = viewModel)
+
+    // ======================================================================
+    //  Rebin dialog
+    // ======================================================================
+    if (showRebinDialog) {
+        var newRows by remember { mutableStateOf(state.rows.toString()) }
+        var newCols by remember { mutableStateOf(state.cols.toString()) }
+        AlertDialog(
+            onDismissRequest = { showRebinDialog = false },
+            title = { Text("Rebin Table") },
+            text = {
+                Column {
+                    Text("Current: ${state.rows} rows × ${state.cols} cols")
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(value = newRows, onValueChange = { newRows = it },
+                        label = { Text("New Rows") }, singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(value = newCols, onValueChange = { newCols = it },
+                        label = { Text("New Columns") }, singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
+                    Spacer(Modifier.height(8.dp))
+                    Text("Values will be bilinearly interpolated to the new dimensions.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val r = newRows.toIntOrNull(); val c = newCols.toIntOrNull()
+                    if (r != null && c != null && r >= 2 && c >= 2) {
+                        viewModel.rebin(r, c)
+                    }
+                    showRebinDialog = false
+                }) { Text("Rebin") }
+            },
+            dismissButton = { TextButton(onClick = { showRebinDialog = false }) { Text("Cancel") } }
+        )
+    }
 
     // ======================================================================
     //  Burn confirmation dialog
@@ -534,6 +599,9 @@ private fun TableToolbar(
         }
         item {
             ToolbarButton("Select All") { viewModel.selectAll() }
+        }
+        item {
+            ToolbarButton("Rebin") { showRebinDialog = true }
         }
     }
 }

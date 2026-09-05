@@ -504,4 +504,82 @@ class TableEditorViewModel @Inject constructor(
     fun hideContextMenu() {
         _uiState.update { it.copy(showContextMenu = false, contextMenuCell = null) }
     }
+
+    // ---- Rebin (resize axis) ----
+    fun rebin(newRows: Int, newCols: Int) {
+        val st = _uiState.value
+        if (newRows < 2 || newCols < 2) return
+        if (st.rows == 0 || st.cols == 0) return
+        pushUndo()
+        val oldValues = st.values
+        val oldX = st.xBins
+        val oldY = st.yBins
+
+        // Generate new axis bins (linear interpolation between old min/max)
+        val newXBins = (0 until newCols).map { i ->
+            if (oldX.isNotEmpty()) {
+                val t = i.toDouble() / (newCols - 1)
+                oldX.first() + t * (oldX.last() - oldX.first())
+            } else i.toDouble() * 500
+        }
+        val newYBins = (0 until newRows).map { i ->
+            if (oldY.isNotEmpty()) {
+                val t = i.toDouble() / (newRows - 1)
+                oldY.first() + t * (oldY.last() - oldY.first())
+            } else 20.0 + i * 10
+        }
+
+        // Bilinear resample
+        val newValues = (0 until newRows).map { r ->
+            (0 until newCols).map { c ->
+                if (oldValues.isNotEmpty() && oldValues[0].isNotEmpty()) {
+                    val fy = if (newRows > 1) r.toDouble() / (newRows - 1) * (st.rows - 1) else 0.0
+                    val fx = if (newCols > 1) c.toDouble() / (newCols - 1) * (st.cols - 1) else 0.0
+                    val r0 = fy.toInt().coerceIn(0, st.rows - 1)
+                    val r1 = (r0 + 1).coerceIn(0, st.rows - 1)
+                    val c0 = fx.toInt().coerceIn(0, st.cols - 1)
+                    val c1 = (c0 + 1).coerceIn(0, st.cols - 1)
+                    val fr = fy - r0
+                    val fc = fx - c0
+                    val v00 = oldValues[r0][c0]
+                    val v01 = oldValues[r0][c1]
+                    val v10 = oldValues[r1][c0]
+                    val v11 = oldValues[r1][c1]
+                    v00 * (1-fc) * (1-fr) + v01 * fc * (1-fr) + v10 * (1-fc) * fr + v11 * fc * fr
+                } else 0.0
+            }
+        }
+        _uiState.update { it.copy(values = newValues, xBins = newXBins, yBins = newYBins,
+            rows = newRows, cols = newCols, isModified = true, canUndo = true, canRedo = false) }
+    }
+
+    // ---- Table comparison ----
+    data class TableDiff(
+        val cellDiffs: Map<Pair<Int, Int>, Pair<Double, Double>>, // (row,col) → (old, new)
+        val maxChange: Double,
+        val avgChange: Double,
+        val changedCells: Int
+    )
+
+    fun compareTo(other: List<List<Double>>): TableDiff {
+        val st = _uiState.value
+        val diffs = mutableMapOf<Pair<Int, Int>, Pair<Double, Double>>()
+        var maxCh = 0.0
+        var sumCh = 0.0
+        var count = 0
+        for (r in 0 until minOf(st.rows, other.size)) {
+            for (c in 0 until minOf(st.cols, other[r].size)) {
+                val mine = st.values[r][c]
+                val theirs = other[r][c]
+                if (mine != theirs) {
+                    val ch = mine - theirs
+                    diffs[Pair(r, c)] = Pair(theirs, mine)
+                    if (kotlin.math.abs(ch) > kotlin.math.abs(maxCh)) maxCh = ch
+                    sumCh += kotlin.math.abs(ch)
+                    count++
+                }
+            }
+        }
+        return TableDiff(diffs, maxCh, if (count > 0) sumCh / count else 0.0, count)
+    }
 }

@@ -342,21 +342,19 @@ private fun GaugeGrid(
     ) {
         items(
             items = widgets,
-            key = { it.id }
+            key = { it.id },
+            span = { widget ->
+                if (widget.width > 1 && widget.width <= columns) {
+                    GridItemSpan(widget.width)
+                } else {
+                    GridItemSpan(1)
+                }
+            }
         ) { widget ->
             val value = if (widget.channelName.isNotBlank()) {
                 channelValues[widget.channelName] ?: 0.0
             } else 0.0
 
-            // Determine span based on widget width config
-            val span = if (widget.width > 1 && widget.width <= columns) {
-                GridItemSpan(widget.width)
-            } else {
-                GridItemSpan(1)
-            }
-
-            // For now all widgets use span 1 (the full span support
-            // needs custom grid logic with itemSpan lookup)
             GaugeHost(
                 config = widget,
                 value = value,
