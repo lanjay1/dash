@@ -92,7 +92,7 @@ class SensorCalibrationViewModel @Inject constructor(
             units = "",
             size = size
         ))
-        _state.update { it.copy(currentValues = current, xBins = (0 until size).map { it.toDouble() }) })
+        _state.update { it.copy(currentValues = current, xBins = (0 until size).map { it.toDouble() }) }
     }
 
     fun captureLow() {
