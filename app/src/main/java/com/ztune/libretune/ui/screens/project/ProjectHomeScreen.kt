@@ -1,5 +1,6 @@
 package com.ztune.libretune.ui.screens.project
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,7 +37,7 @@ fun ProjectHomeScreen(onNavigateBack: () -> Unit = {}) {
         LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(recentProjects) { project ->
-                Card(modifier = Modifier.fillMaxWidth(), onClick = {}) {
+                Card(modifier = Modifier.fillMaxWidth().clickable { }) {
                     Column(Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(project.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,

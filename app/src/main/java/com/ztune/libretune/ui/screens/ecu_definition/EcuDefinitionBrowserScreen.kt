@@ -1,5 +1,6 @@
 package com.ztune.libretune.ui.screens.ecu_definition
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -82,7 +83,7 @@ fun EcuDefinitionBrowserScreen(
                 LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(state.definitions) { def ->
-                        Card(modifier = Modifier.fillMaxWidth(), onClick = {}) {
+                        Card(modifier = Modifier.fillMaxWidth().clickable { }) {
                             Column(Modifier.padding(16.dp)) {
                                 Text(def.fileName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                                 Text("Type: ${def.ecuType}", style = MaterialTheme.typography.bodySmall,
