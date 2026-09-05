@@ -77,9 +77,10 @@ object AppModule {
         @ApplicationScope scope: CoroutineScope,
         settings: AppSettings,
         channelStore: RealtimeChannelStore,
-        dataLogManager: DataLogManager
+        dataLogManager: DataLogManager,
+        @ApplicationContext context: Context
     ): EcuConnectionManager {
-        return EcuConnectionManager(scope, settings, channelStore, dataLogManager)
+        return EcuConnectionManager(scope, settings, channelStore, dataLogManager, context)
     }
 
     @Provides

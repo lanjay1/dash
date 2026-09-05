@@ -44,7 +44,8 @@ class EcuConnectionManager(
     private val applicationScope: CoroutineScope,
     private val settings: AppSettings,
     private val channelStore: RealtimeChannelStore,
-    private val dataLogManager: DataLogManager
+    private val dataLogManager: DataLogManager,
+    private val appContext: android.content.Context
 ) {
     private val _state = MutableStateFlow(EcuConnectionState())
     val state: StateFlow<EcuConnectionState> = _state.asStateFlow()
@@ -96,6 +97,9 @@ class EcuConnectionManager(
                 // authoritative loop that feeds channelStore → UI.
                 startStreamLoop(ecu, definition, gen)
                 startHeartbeatMonitor(gen)
+
+                // Start foreground service to keep connection alive in background
+                EcuCommunicationService.start(appContext)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -249,6 +253,10 @@ class EcuConnectionManager(
         streamJob?.cancel(); streamJob = null
         connectJob?.cancel(); connectJob = null
         reconnectJob?.cancel(); reconnectJob = null
+
+        // Stop foreground service
+        EcuCommunicationService.stop(appContext)
+
         val ecu = ecuInterface; val t = transport
         if (ecu != null || t != null) {
             applicationScope.launch(Dispatchers.IO) {

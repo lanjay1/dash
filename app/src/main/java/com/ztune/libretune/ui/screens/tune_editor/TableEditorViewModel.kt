@@ -98,8 +98,9 @@ class TableEditorViewModel @Inject constructor(
 
         definition = def
         tableDef = tbl
-        xOutputChannel = null
-        yOutputChannel = null
+        // Set live cursor channels from axis metadata if available
+        xOutputChannel = tbl.xAxis?.expression ?: "rpm"
+        yOutputChannel = tbl.yAxis?.expression ?: "map"
         val tune = tuneManager.currentTune
         val pageData = tune?.getPageData(tbl.page)
         val decoder = com.ztune.libretune.core.realtime.RealtimeDecoder(def)
@@ -140,8 +141,91 @@ class TableEditorViewModel @Inject constructor(
         }
     }
 
-    fun selectCell(row: Int, col: Int) { _uiState.update { it.copy(selectedCell = Pair(row, col)) } }
-    fun clearSelection() { _uiState.update { it.copy(selectedCell = null) } }
+    fun selectCell(row: Int, col: Int) { _uiState.update { it.copy(selectedCell = Pair(row, col), selectedCells = setOf(Pair(row, col))) } }
+    fun clearSelection() { _uiState.update { it.copy(selectedCell = null, selectedCells = emptySet()) } }
+
+    // ---- Multi-cell selection ----
+    fun selectCellRange(startRow: Int, startCol: Int, endRow: Int, endCol: Int) {
+        val r1 = minOf(startRow, endRow); val r2 = maxOf(startRow, endRow)
+        val c1 = minOf(startCol, endCol); val c2 = maxOf(startCol, endCol)
+        val cells = (r1..r2).flatMap { r -> (c1..c2).map { c -> Pair(r, c) } }.toSet()
+        _uiState.update { it.copy(selectedCell = Pair(r1, c1), selectedCells = cells) }
+    }
+
+    fun toggleCellInSelection(row: Int, col: Int) {
+        val cell = Pair(row, col)
+        val current = _uiState.value.selectedCells.toMutableSet()
+        if (cell in current) current.remove(cell) else current.add(cell)
+        _uiState.update { it.copy(selectedCell = cell, selectedCells = current) }
+    }
+
+    fun selectAll() {
+        val st = _uiState.value
+        val cells = (0 until st.rows).flatMap { r -> (0 until st.cols).map { c -> Pair(r, c) } }.toSet()
+        _uiState.update { it.copy(selectedCells = cells, selectedCell = Pair(0, 0)) }
+    }
+
+    // ---- Copy / Paste ----
+    private var clipboard: List<List<Double>>? = null
+
+    fun copySelection() {
+        val st = _uiState.value
+        if (st.selectedCells.isEmpty()) return
+        val rows = st.selectedCells.map { it.first }
+        val cols = st.selectedCells.map { it.second }
+        val minR = rows.min(); val maxR = rows.max()
+        val minC = cols.min(); val maxC = cols.max()
+        val data = (minR..maxR).map { r -> (minC..maxC).map { c ->
+            if (Pair(r, c) in st.selectedCells) st.values.getOrNull(r)?.getOrNull(c) ?: 0.0 else Double.NaN
+        }}
+        clipboard = data
+    }
+
+    fun pasteToSelection() {
+        val clip = clipboard ?: return
+        val st = _uiState.value
+        val target = st.selectedCell ?: return
+        pushUndo()
+        val mutable = toMutableValues()
+        for ((dr, row) in clip.withIndex()) {
+            for ((dc, value) in row.withIndex()) {
+                if (value.isNaN()) continue
+                val r = target.first + dr; val c = target.second + dc
+                if (r in mutable.indices && c in mutable[r].indices) {
+                    mutable[r][c] = value
+                }
+            }
+        }
+        applyValues(mutable)
+    }
+
+    // ---- Add offset to selection ----
+    fun addOffsetToSelection(offset: Double) {
+        val st = _uiState.value
+        if (st.selectedCells.isEmpty()) return
+        pushUndo()
+        val mutable = toMutableValues()
+        for ((r, c) in st.selectedCells) {
+            if (r in mutable.indices && c in mutable[r].indices) {
+                mutable[r][c] = mutable[r][c] + offset
+            }
+        }
+        applyValues(mutable)
+    }
+
+    // ---- Fill selection with value ----
+    fun fillSelection(value: Double) {
+        val st = _uiState.value
+        if (st.selectedCells.isEmpty()) return
+        pushUndo()
+        val mutable = toMutableValues()
+        for ((r, c) in st.selectedCells) {
+            if (r in mutable.indices && c in mutable[r].indices) {
+                mutable[r][c] = value
+            }
+        }
+        applyValues(mutable)
+    }
 
     fun setCellValue(row: Int, col: Int, value: Double) {
         val current = _uiState.value
@@ -311,7 +395,9 @@ class TableEditorViewModel @Inject constructor(
     }
 
     private fun getSelectedCells(): List<Pair<Int, Int>>? {
-        val cell = _uiState.value.selectedCell ?: return null
+        val st = _uiState.value
+        if (st.selectedCells.isNotEmpty()) return st.selectedCells.toList()
+        val cell = st.selectedCell ?: return null
         return listOf(cell)
     }
 
@@ -383,11 +469,39 @@ class TableEditorViewModel @Inject constructor(
         val tableName: String = "", val title: String = "", val rows: Int = 0, val cols: Int = 0,
         val xBins: List<Double> = emptyList(), val yBins: List<Double> = emptyList(),
         val values: List<List<Double>> = emptyList(), val selectedCell: Pair<Int, Int>? = null,
+        val selectedCells: Set<Pair<Int, Int>> = emptySet(),
         val isModified: Boolean = false, val units: String = "", val format: String = "0.0",
         val min: Double = 0.0, val max: Double = 255.0, val canUndo: Boolean = false,
         val canRedo: Boolean = false, val isBurning: Boolean = false,
         val burnError: String? = null,
         val liveXValue: Double? = null, val liveYValue: Double? = null,
-        val liveCell: Pair<Int, Int>? = null
+        val liveCell: Pair<Int, Int>? = null,
+        val showContextMenu: Boolean = false,
+        val contextMenuCell: Pair<Int, Int>? = null,
+        val tableStats: TableStats? = null
     )
+
+    data class TableStats(
+        val min: Double, val max: Double, val avg: Double,
+        val cellCount: Int, val nonZeroCount: Int
+    )
+
+    fun calculateStats(): TableStats? {
+        val st = _uiState.value
+        if (st.values.isEmpty()) return null
+        val all = st.values.flatten().filter { !it.isNaN() }
+        if (all.isEmpty()) return null
+        return TableStats(
+            min = all.min(), max = all.max(), avg = all.average(),
+            cellCount = all.size, nonZeroCount = all.count { it != 0.0 }
+        )
+    }
+
+    fun showContextMenu(row: Int, col: Int) {
+        _uiState.update { it.copy(showContextMenu = true, contextMenuCell = Pair(row, col)) }
+    }
+
+    fun hideContextMenu() {
+        _uiState.update { it.copy(showContextMenu = false, contextMenuCell = null) }
+    }
 }

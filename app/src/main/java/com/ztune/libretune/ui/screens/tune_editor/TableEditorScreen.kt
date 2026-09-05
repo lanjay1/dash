@@ -1,6 +1,7 @@
 package com.ztune.libretune.ui.screens.tune_editor
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -203,6 +204,14 @@ fun TableEditorScreen(
         )
 
         // ------------------------------------------------------------------
+        //  Toolbar operations bar
+        // ------------------------------------------------------------------
+        TableToolbar(
+            state = state,
+            viewModel = viewModel
+        )
+
+        // ------------------------------------------------------------------
         //  Table grid  (LazyColumn of rows, each containing a LazyRow of cells)
         // ------------------------------------------------------------------
         LazyColumn(
@@ -261,15 +270,17 @@ fun TableEditorScreen(
                     LazyRow(state = sharedHorizontalState) {
                         itemsIndexed(rowValues) { colIdx, cellValue ->
                             val isSelected = state.selectedCell == Pair(rowIdx, colIdx)
+                            val isInSelection = Pair(rowIdx, colIdx) in state.selectedCells
+                            val isLiveCell = state.liveCell == Pair(rowIdx, colIdx)
                             TableCell(
                                 value = cellValue,
                                 format = state.format,
                                 min = state.min,
                                 max = state.max,
-                                isSelected = isSelected,
+                                isSelected = isSelected || isInSelection,
+                                isLiveCell = isLiveCell,
                                 onClick = {
-                                    if (isSelected) {
-                                        // Second tap on the already-selected cell → open edit dialog
+                                    if (isSelected && state.selectedCells.size <= 1) {
                                         editingRow = rowIdx
                                         editingCol = colIdx
                                         editValueText = formatCellValue(cellValue, state.format)
@@ -277,6 +288,9 @@ fun TableEditorScreen(
                                     } else {
                                         viewModel.selectCell(rowIdx, colIdx)
                                     }
+                                },
+                                onLongClick = {
+                                    viewModel.showContextMenu(rowIdx, colIdx)
                                 }
                             )
                         }
@@ -305,6 +319,11 @@ fun TableEditorScreen(
             }
         )
     }
+
+    // ======================================================================
+    //  Context menu (long-press on cell)
+    // ======================================================================
+    TableContextMenu(state = state, viewModel = viewModel)
 
     // ======================================================================
     //  Burn confirmation dialog
@@ -469,4 +488,115 @@ private fun CellEditDialog(
             }
         }
     )
+}
+
+// =============================================================================
+//  Table Toolbar — operations bar (Set Equal, Scale, Smooth, Interpolate, etc.)
+// =============================================================================
+
+@Composable
+private fun TableToolbar(
+    state: TableEditorViewModel.TableEditorUiState,
+    viewModel: TableEditorViewModel
+) {
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        item {
+            ToolbarButton("Equal") { viewModel.setCellsEqual() }
+        }
+        item {
+            ToolbarButton("Scale 5%") { viewModel.scaleSelected(1.05) }
+        }
+        item {
+            ToolbarButton("Scale -5%") { viewModel.scaleSelected(0.95) }
+        }
+        item {
+            ToolbarButton("+1") { viewModel.addOffsetToSelection(1.0) }
+        }
+        item {
+            ToolbarButton("-1") { viewModel.addOffsetToSelection(-1.0) }
+        }
+        item {
+            ToolbarButton("Smooth") { viewModel.smoothSelected() }
+        }
+        item {
+            ToolbarButton("Interp") { viewModel.interpolateSelected() }
+        }
+        item {
+            ToolbarButton("Copy") { viewModel.copySelection() }
+        }
+        item {
+            ToolbarButton("Paste") { viewModel.pasteToSelection() }
+        }
+        item {
+            ToolbarButton("Select All") { viewModel.selectAll() }
+        }
+    }
+}
+
+@Composable
+private fun ToolbarButton(label: String, onClick: () -> Unit) {
+    androidx.compose.material3.OutlinedButton(
+        onClick = onClick,
+        modifier = Modifier.height(36.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp)
+    ) {
+        Text(label, fontSize = 11.sp)
+    }
+}
+
+// =============================================================================
+//  Context Menu — long-press popup for cell operations
+// =============================================================================
+
+@Composable
+private fun TableContextMenu(
+    state: TableEditorViewModel.TableEditorUiState,
+    viewModel: TableEditorViewModel
+) {
+    if (state.showContextMenu) {
+        val cell = state.contextMenuCell ?: return
+        androidx.compose.material3.DropdownMenu(
+            expanded = true,
+            onDismissRequest = { viewModel.hideContextMenu() }
+        ) {
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Edit Cell") },
+                onClick = {
+                    viewModel.selectCell(cell.first, cell.second)
+                    viewModel.hideContextMenu()
+                }
+            )
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Copy") },
+                onClick = { viewModel.copySelection(); viewModel.hideContextMenu() }
+            )
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Paste") },
+                onClick = { viewModel.pasteToSelection(); viewModel.hideContextMenu() }
+            )
+            androidx.compose.material3.HorizontalDivider()
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Smooth") },
+                onClick = { viewModel.smoothSelected(); viewModel.hideContextMenu() }
+            )
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Interpolate") },
+                onClick = { viewModel.interpolateSelected(); viewModel.hideContextMenu() }
+            )
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Set Equal") },
+                onClick = { viewModel.setCellsEqual(); viewModel.hideContextMenu() }
+            )
+            androidx.compose.material3.HorizontalDivider()
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Select All") },
+                onClick = { viewModel.selectAll(); viewModel.hideContextMenu() }
+            )
+        }
+    }
 }

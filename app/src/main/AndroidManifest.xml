@@ -55,6 +55,12 @@
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/device_filter" />
         </activity>
+
+        <!-- Foreground service for ECU streaming while backgrounded -->
+        <service
+            android:name=".core.EcuCommunicationService"
+            android:foregroundServiceType="connectedDevice"
+            android:exported="false" />
     </application>
 
 </manifest>
