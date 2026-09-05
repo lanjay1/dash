@@ -236,97 +236,45 @@ fun TableEditorScreen(
         )
 
         // ------------------------------------------------------------------
-        //  Table grid  (LazyColumn of rows, each containing a LazyRow of cells)
+        //  Canvas-based table grid (replaces LazyColumn + LazyRow)
         // ------------------------------------------------------------------
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(start = if (is3D) 4.dp else 0.dp, end = 4.dp)
-        ) {
-            // ---- Item 0: X-axis header row ----
-            item(key = "x_header") {
-                Row {
-                    // Corner cell (shows "kPa" or similar Y-axis label for 3D)
-                    if (is3D) {
-                        Box(
-                            modifier = Modifier
-                                .width(56.dp)
-                                .height(32.dp)
-                                .background(MaterialTheme.colorScheme.surfaceVariant)
-                                .border(
-                                    width = 0.5.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "kPa",
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    // X-axis bins in a LazyRow
-                    LazyRow(state = sharedHorizontalState) {
-                        itemsIndexed(state.xBins) { _, bin ->
-                            TableBinCell(
-                                label = formatCellValue(bin, state.format),
-                                isXHeader = true
-                            )
-                        }
-                    }
+        CanvasTableEditor(
+            values = state.values,
+            xBins = state.xBins,
+            yBins = state.yBins,
+            min = state.min,
+            max = state.max,
+            format = state.format,
+            units = state.units,
+            selectedCell = state.selectedCell,
+            selectedCells = state.selectedCells,
+            liveCell = state.liveCell,
+            onCellTap = { row, col ->
+                val isSelected = state.selectedCell == Pair(row, col)
+                if (isSelected && state.selectedCells.size <= 1) {
+                    editingRow = row
+                    editingCol = col
+                    editValueText = formatCellValue(state.values[row][col], state.format)
+                    showEditDialog = true
+                } else {
+                    viewModel.selectCell(row, col)
                 }
-            }
-
-            // ---- Data rows ----
-            itemsIndexed(state.values, key = { idx, _ -> "row_$idx" }) { rowIdx, rowValues ->
-                Row {
-                    // Y-axis bin header (3D tables only)
-                    if (is3D) {
-                        val yBin = if (rowIdx < state.yBins.size) state.yBins[rowIdx] else 0.0
-                        TableBinCell(
-                            label = formatCellValue(yBin, state.format),
-                            isXHeader = false
-                        )
-                    }
-                    // Value cells in a LazyRow sharing the horizontal state
-                    LazyRow(state = sharedHorizontalState) {
-                        itemsIndexed(rowValues) { colIdx, cellValue ->
-                            val isSelected = state.selectedCell == Pair(rowIdx, colIdx)
-                            val isInSelection = Pair(rowIdx, colIdx) in state.selectedCells
-                            val isLiveCell = state.liveCell == Pair(rowIdx, colIdx)
-                            TableCell(
-                                value = cellValue,
-                                format = state.format,
-                                min = state.min,
-                                max = state.max,
-                                isSelected = isSelected || isInSelection,
-                                isLiveCell = isLiveCell,
-                                onClick = {
-                                    if (isSelected && state.selectedCells.size <= 1) {
-                                        editingRow = rowIdx
-                                        editingCol = colIdx
-                                        editValueText = formatCellValue(cellValue, state.format)
-                                        showEditDialog = true
-                                    } else {
-                                        viewModel.selectCell(rowIdx, colIdx)
-                                    }
-                                },
-                                onLongClick = {
-                                    viewModel.showContextMenu(rowIdx, colIdx)
-                                }
-                            )
-                        }
-                    }
+            },
+            onCellLongPress = { row, col ->
+                viewModel.showContextMenu(row, col)
+            },
+            onCellDragStart = { row, col ->
+                viewModel.selectCell(row, col)
+            },
+            onCellDrag = { row, col ->
+                val start = state.selectedCell
+                if (start != null) {
+                    viewModel.selectCellRange(start.first, start.second, row, col)
                 }
-            }
-
-            // Bottom padding so the last row is not clipped by the edge.
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-            }
-        }
+            },
+            onCellDragEnd = { },
+            modifier = Modifier.fillMaxSize()
+        )
     }
 
     // ======================================================================
