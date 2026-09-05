@@ -36,7 +36,7 @@ fun ProjectHomeScreen(onNavigateBack: () -> Unit = {}) {
         LazyColumn(Modifier.padding(padding).fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(recentProjects) { project ->
-                Card(Modifier.fillMaxWidth(), onClick = {}) {
+                Card(modifier = Modifier.fillMaxWidth(), onClick = {}) {
                     Column(Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(project.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold,

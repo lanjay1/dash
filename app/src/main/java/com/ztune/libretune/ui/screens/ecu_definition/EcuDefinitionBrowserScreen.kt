@@ -82,7 +82,7 @@ fun EcuDefinitionBrowserScreen(
                 LazyColumn(Modifier.fillMaxSize().padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(state.definitions) { def ->
-                        Card(Modifier.fillMaxWidth(), onClick = {}) {
+                        Card(modifier = Modifier.fillMaxWidth(), onClick = {}) {
                             Column(Modifier.padding(16.dp)) {
                                 Text(def.fileName, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                                 Text("Type: ${def.ecuType}", style = MaterialTheme.typography.bodySmall,

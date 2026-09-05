@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.*
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -18,6 +20,7 @@ import com.ztune.libretune.core.dash.GaugeWidgetType
  * Dialog for adding a new gauge to the dashboard.
  * Shows available channel names and gauge types.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GaugePickerDialog(
     availableChannels: List<String>,
@@ -69,6 +72,7 @@ fun GaugePickerDialog(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun GaugeTypeSelector(
     selected: GaugeWidgetType,
@@ -97,6 +101,7 @@ private fun GaugeTypeSelector(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DropdownMenuBox(
     options: List<String>,
