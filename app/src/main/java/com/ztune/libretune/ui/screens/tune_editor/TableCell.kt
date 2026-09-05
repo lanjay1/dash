@@ -1,5 +1,6 @@
 package com.ztune.libretune.ui.screens.tune_editor
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -23,7 +24,7 @@ import androidx.compose.ui.unit.sp
 /**
  * A single table cell with value, heatmap color, selection border, and live cursor indicator.
  */
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun TableCell(
     value: Double,

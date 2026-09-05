@@ -286,8 +286,8 @@ private fun DrawScope.drawTableGrid(
             val y = headerHeight + r * cellHeight + scrollY
 
             // Skip if completely outside visible area
-            if (x + cellWidth < clipLeft || x > clipRight) continue
-            if (y + cellHeight < clipTop || y > clipBottom) continue
+            if (x + cellWidth < clipLeft || x > this.size.width) continue
+            if (y + cellHeight < clipTop || y > this.size.height) continue
 
             val value = values[r][c]
             val cellColor = TableColorUtils.valueToColor(value, min, max)
@@ -348,7 +348,7 @@ private fun DrawScope.drawTableGrid(
     // ---- Draw X-axis bin labels ----
     for (c in 0 until cols) {
         val x = cornerSize + c * cellWidth + scrollX
-        if (x + cellWidth < cornerSize || x > size.width) continue
+        if (x + cellWidth < cornerSize || x > this.size.width) continue
 
         val binValue = xBins.getOrElse(c) { (c * 500).toDouble() }
         val label = formatCellValue(binValue, format)
@@ -365,7 +365,7 @@ private fun DrawScope.drawTableGrid(
     // ---- Draw Y-axis bin labels ----
     for (r in 0 until rows) {
         val y = headerHeight + r * cellHeight + scrollY
-        if (y + cellHeight < headerHeight || y > size.height) continue
+        if (y + cellHeight < headerHeight || y > this.size.height) continue
 
         val binValue = yBins.getOrElse(r) { (20 + r * 10).toDouble() }
         val label = formatCellValue(binValue, format)

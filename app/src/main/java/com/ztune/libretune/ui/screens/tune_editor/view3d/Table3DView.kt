@@ -34,29 +34,28 @@ fun Table3DView(
                 setEGLContextClientVersion(2)
                 setRenderer(renderer)
                 renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
-                setOnTouchListener { v, event ->
-                    // Simple gesture: 1-finger drag = rotate, 2-finger pinch = zoom
+                setOnTouchListener { _, event ->
                     when (event.pointerCount) {
                         1 -> {
-                            if (event.action == android.view.MotionEvent.ACTION_MOVE) {
-                                val dx = event.x - event.historyX
-                                val dy = event.y - event.historyY
+                            if (event.action == android.view.MotionEvent.ACTION_MOVE && event.historySize > 0) {
+                                val dx = event.x - event.getHistoricalX(0)
+                                val dy = event.y - event.getHistoricalY(0)
                                 renderer.azimuth += dx * 0.01f
                                 renderer.elevation = (renderer.elevation - dy * 0.01f).coerceIn(-1.2f, 1.2f)
                                 requestRender()
                             }
                         }
                         2 -> {
-                            if (event.action == android.view.MotionEvent.ACTION_MOVE) {
-                                val dist = android.graphics.PointF.length(
-                                    event.getX(0) - event.getX(1),
-                                    event.getY(0) - event.getY(1)
-                                )
-                                val prevDist = android.graphics.PointF.length(
-                                    event.getHistoricalX(0, 0) - event.getHistoricalX(1, 0),
-                                    event.getHistoricalY(0, 0) - event.getHistoricalY(1, 0)
-                                )
-                                if (prevDist > 0) {
+                            if (event.action == android.view.MotionEvent.ACTION_MOVE && event.historySize > 0) {
+                                val dist = Math.hypot(
+                                    (event.getX(0) - event.getX(1)).toDouble(),
+                                    (event.getY(0) - event.getY(1)).toDouble()
+                                ).toFloat()
+                                val prevDist = Math.hypot(
+                                    (event.getHistoricalX(0) - event.getHistoricalX(1)).toDouble(),
+                                    (event.getHistoricalY(0) - event.getHistoricalY(1)).toDouble()
+                                ).toFloat()
+                                if (prevDist > 0f && dist > 0f) {
                                     renderer.zoom = (renderer.zoom * prevDist / dist).coerceIn(1f, 10f)
                                     requestRender()
                                 }

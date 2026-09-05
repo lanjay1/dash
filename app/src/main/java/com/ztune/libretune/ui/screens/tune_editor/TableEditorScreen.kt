@@ -1,6 +1,7 @@
 package com.ztune.libretune.ui.screens.tune_editor
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -232,7 +233,8 @@ fun TableEditorScreen(
         // ------------------------------------------------------------------
         TableToolbar(
             state = state,
-            viewModel = viewModel
+            viewModel = viewModel,
+            onRebin = { showRebinDialog = true }
         )
 
         // ------------------------------------------------------------------
@@ -510,7 +512,8 @@ private fun CellEditDialog(
 @Composable
 private fun TableToolbar(
     state: TableEditorViewModel.TableEditorUiState,
-    viewModel: TableEditorViewModel
+    viewModel: TableEditorViewModel,
+    onRebin: () -> Unit
 ) {
     LazyRow(
         modifier = Modifier
@@ -549,7 +552,7 @@ private fun TableToolbar(
             ToolbarButton("Select All") { viewModel.selectAll() }
         }
         item {
-            ToolbarButton("Rebin") { showRebinDialog = true }
+            ToolbarButton("Rebin") { onRebin() }
         }
     }
 }
@@ -614,5 +617,22 @@ private fun TableContextMenu(
                 onClick = { viewModel.selectAll(); viewModel.hideContextMenu() }
             )
         }
+    }
+}
+
+/**
+ * Format a cell value using a String.format pattern.
+ * Used by TableEditorScreen, CanvasTableEditor, and TableCell.
+ */
+internal fun formatCellValue(value: Double, format: String): String {
+    return try {
+        String.format("%.${
+            when {
+                format.contains(".") -> format.substringAfter(".").length
+                else -> 1
+            }
+        }f", value)
+    } catch (_: Exception) {
+        value.toString()
     }
 }
